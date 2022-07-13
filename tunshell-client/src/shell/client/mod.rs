@@ -2,7 +2,7 @@ use super::{
     ShellClientMessage, ShellClientStream, ShellServerMessage, StartShellPayload, WindowSize,
 };
 use crate::{
-    shell::proto::ShellStartedPayload, util::delay::delay_for, ShellKey,
+    remote_pty_supported, shell::proto::ShellStartedPayload, util::delay::delay_for, ShellKey,
     TunnelStream,
 };
 use anyhow::{Context, Error, Result};
@@ -24,7 +24,7 @@ cfg_if::cfg_if! {
     }
 }
 cfg_if::cfg_if! {
-    if #[cfg(unix)] {
+    if #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))] {
         mod remote_pty;
         use remote_pty::start_remote_pty_master;
     }
@@ -62,10 +62,7 @@ impl ShellClient {
                 term: self.host_shell.term().unwrap_or("".to_owned()),
                 color: self.host_shell.color().unwrap_or(false),
                 size: WindowSize::from(self.host_shell.size().await?),
-                #[cfg(unix)]
-                remote_pty_support: true,
-                #[cfg(not(unix))]
-                remote_pty_support: false,
+                remote_pty_support: remote_pty_supported(),
             }))
             .await?;
 
@@ -83,7 +80,7 @@ impl ShellClient {
 
         let exit_code = if let ShellStartedPayload::RemotePty = response {
             cfg_if::cfg_if! {
-                if #[cfg(not(unix))] {
+                if #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))] {
                     return Err(Error::msg("shell server started remote pty when not supported on local"));
                 } else {
                     info!("starting remote pty master");
