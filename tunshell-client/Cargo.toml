@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Elliot Levin <elliotlevin@hotmail.com>"]
 edition = "2018"
 
+[patch.crates-io]
+serial = { git = "https://github.com/bytebeamio/serial-rs", branch = "android_fix" }
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

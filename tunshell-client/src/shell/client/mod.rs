@@ -71,7 +71,7 @@ impl ShellClient {
         let response = tokio::select! {
             message = stream.next() => match message {
                 Some(Ok(ShellServerMessage::ShellStarted(res))) => res,
-                Some(Ok(_)) => return Err(Error::msg("shell server returned an unexpected response")),
+                Some(Ok(_)) => return Err(Error::msg(format!("shell server returned an unexpected response: {:?}", message))),
                 Some(Err(err)) => return Err(Error::from(err).context("shell server returned an error")),
                 None => return Err(Error::msg("did not receive shell started response"))
             },
