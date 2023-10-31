@@ -59,11 +59,11 @@ impl Config {
         pemfile::certs(&mut reader).map_err(|_| Error::msg("failed to parse tls cert file"))
     }
 
-    pub(super) fn parse_tls_private_key(path: String) -> Result<PrivateKey> {
+    pub fn parse_tls_private_key(path: String) -> Result<PrivateKey> {
         let file = fs::File::open(path)?;
-        let mut reader = io::BufReader::new(file);
 
-        let keys = pemfile::pkcs8_private_keys(&mut reader)
+        let keys = pemfile::rsa_private_keys(&mut io::BufReader::new(&file))
+            .or_else(pemfile::pkcs8_private_keys(&mut io::BufReader::new(&file)))
             .map_err(|_| Error::msg("failed to parse tls private key file"))?;
 
         Ok(keys.into_iter().next().unwrap())
