@@ -63,7 +63,7 @@ impl Config {
         let file = fs::File::open(path)?;
 
         let keys = pemfile::rsa_private_keys(&mut io::BufReader::new(&file))
-            .or_else(pemfile::pkcs8_private_keys(&mut io::BufReader::new(&file)))
+            .or_else(|_| pemfile::pkcs8_private_keys(&mut io::BufReader::new(&file)))
             .map_err(|_| Error::msg("failed to parse tls private key file"))?;
 
         Ok(keys.into_iter().next().unwrap())
