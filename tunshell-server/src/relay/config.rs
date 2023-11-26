@@ -3,6 +3,7 @@ use rustls::{internal::pemfile, Certificate, NoClientAuth, PrivateKey, ServerCon
 use std::fs;
 use std::io;
 use std::{env, sync::Arc, time::Duration};
+use std::io::Cursor;
 
 const DEFAULT_CLIENT_KEY_TIMEOUT_MS: u64 = 3000;
 const DEFAULT_CLEAN_EXPIRED_CONNECTION_INTERVAL_MS: u64 = 60_000;
@@ -60,13 +61,14 @@ impl Config {
     }
 
     pub fn parse_tls_private_key(path: String) -> Result<PrivateKey> {
-        let file = fs::File::open(path)?;
-
-        let keys = pemfile::rsa_private_keys(&mut io::BufReader::new(&file))
-            .or_else(|_| pemfile::pkcs8_private_keys(&mut io::BufReader::new(&file)))
+        let key_s = fs::read_to_string(path)?;
+        let key = pemfile::rsa_private_keys(&mut Cursor::new(key_s.as_bytes()))
+            .and_then(|k| k.into_iter().next().ok_or(()))
+            .or_else(|_| pemfile::pkcs8_private_keys(&mut Cursor::new(key_s.as_bytes()))
+                .and_then(|k| k.into_iter().next().ok_or(())))
             .map_err(|_| Error::msg("failed to parse tls private key file"))?;
 
-        Ok(keys.into_iter().next().unwrap())
+        Ok(key)
     }
 }
 
