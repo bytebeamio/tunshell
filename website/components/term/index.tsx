@@ -92,17 +92,7 @@ export const TerminalEmulator: React.SFC<TerminalEmulatorProps> = ({
 
   if (fullScreen) {
     return (
-      <Styled.FullScreenWrapper>
-        <Styled.Overlay />
-
-        <Styled.Term>
-          <Styled.Close onClick={() => onClose()}>
-            <ion-icon name="close-circle-outline" />
-          </Styled.Close>
-          <Styled.TermViewport ref={viewportRef} />
-        </Styled.Term>
-        {children}
-      </Styled.FullScreenWrapper>
+      <Styled.Term ref={viewportRef}/>
     );
   } else {
     return <Styled.Term ref={viewportRef} />;
