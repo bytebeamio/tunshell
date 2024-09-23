@@ -1,13 +1,13 @@
 cfg_if::cfg_if! {
     if #[cfg(not(target_arch = "wasm32"))] {
         use tokio::io::{AsyncRead, AsyncWrite};
-        
+
         pub trait AsyncIO : AsyncRead + AsyncWrite + Send + Unpin {}
 
         pub mod tcp_stream;
 
         cfg_if::cfg_if! {
-            if #[cfg(openssl)] {
+            if #[cfg(feature = "use-native-tls")] {
                 mod openssl_tls_stream;
                 pub mod tls_stream {
                     pub use super::openssl_tls_stream::*;
@@ -46,7 +46,7 @@ mod tests {
             443,
             "test",
             true,
-            false
+            false,
         );
 
         let result = Runtime::new()

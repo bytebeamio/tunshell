@@ -1,3 +1,4 @@
+#![allow(unexpected_cfgs)]
 use crate::Config;
 use anyhow::{bail, Context as AnyhowContext, Result};
 use std::{
@@ -115,7 +116,7 @@ async fn connect_via_http_proxy(
 
     let read = match proxy_stream.read(&mut read_buff).await? {
         0 => bail!("Failed to read response from http proxy"),
-        read @ _ => read,
+        read => read,
     };
 
     let response =

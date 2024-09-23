@@ -1,13 +1,13 @@
 use crate::Config;
 use anyhow::{bail, Context as AnyhowContext, Result};
-use std::{time::Duration, net::ToSocketAddrs};
+use std::{net::ToSocketAddrs, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
 
 pub struct TcpServerStream {
-    inner: TcpStream
+    inner: TcpStream,
 }
 
 impl TcpServerStream {
@@ -55,7 +55,7 @@ async fn connect_via_http_proxy(
 
     let read = match proxy_stream.read(&mut read_buff).await? {
         0 => bail!("Failed to read response from http proxy"),
-        read @ _ => read,
+        read => read,
     };
 
     let response =

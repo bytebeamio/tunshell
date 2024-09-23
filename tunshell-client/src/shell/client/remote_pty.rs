@@ -13,8 +13,8 @@ use anyhow::{Error, Result};
 use futures::StreamExt;
 use remote_pty_common::channel;
 
-use crate::STOP_ON_SIGINT;
 use crate::shell::proto::{RemotePtyDataPayload, RemotePtyEventPayload, ShellServerMessage};
+use crate::STOP_ON_SIGINT;
 
 use super::ShellStream;
 
@@ -116,10 +116,10 @@ impl TransportChannel {
     }
 }
 
-impl Into<channel::RemoteChannel> for TransportChannel {
-    fn into(self) -> channel::RemoteChannel {
+impl From<TransportChannel> for channel::RemoteChannel {
+    fn from(val: TransportChannel) -> Self {
         channel::RemoteChannel::new(channel::transport::rw::ReadWriteTransport::new(
-            self.rx, self.tx,
+            val.rx, val.tx,
         ))
     }
 }
@@ -138,8 +138,10 @@ impl Listener for RxListener {
     }
 }
 
+type TransportMapping = HashMap<u32, (TransportTx, Arc<AtomicBool>)>;
+
 struct ChannelDemuxer {
-    state: Arc<Mutex<HashMap<u32, (TransportTx, Arc<AtomicBool>)>>>,
+    state: Arc<Mutex<TransportMapping>>,
     chan_tx: sync::mpsc::Sender<TransportChannel>,
     read_tx: tokio::sync::mpsc::UnboundedSender<RemotePtyDataPayload>,
     read_rx: tokio::sync::mpsc::UnboundedReceiver<RemotePtyDataPayload>,
@@ -170,9 +172,7 @@ impl ChannelDemuxer {
         }
     }
 
-    fn state(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, HashMap<u32, (TransportTx, Arc<AtomicBool>)>>> {
+    fn state(&self) -> Result<std::sync::MutexGuard<'_, TransportMapping>> {
         self.state
             .lock()
             .map_err(|_| Error::msg("failed to lock mutex"))

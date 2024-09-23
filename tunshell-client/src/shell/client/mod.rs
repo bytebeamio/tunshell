@@ -1,10 +1,8 @@
 use super::{
     ShellClientMessage, ShellClientStream, ShellServerMessage, StartShellPayload, WindowSize,
 };
-use crate::{
-    shell::proto::ShellStartedPayload, util::delay::delay_for, ShellKey,
-    TunnelStream,
-};
+use crate::{shell::proto::ShellStartedPayload, util::delay::delay_for, ShellKey, TunnelStream};
+
 use anyhow::{Context, Error, Result};
 use futures::stream::StreamExt;
 use log::*;
@@ -15,9 +13,6 @@ cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
         mod xtermjs;
         pub use xtermjs::*;
-    } else if #[cfg(integration_test)] {
-        mod test;
-        pub use test::*;
     } else {
         mod shell;
         pub use shell::*;
@@ -75,7 +70,7 @@ impl ShellClient {
             message = stream.next() => match message {
                 Some(Ok(ShellServerMessage::ShellStarted(res))) => res,
                 Some(Ok(_)) => return Err(Error::msg("shell server returned an unexpected response")),
-                Some(Err(err)) => return Err(Error::from(err).context("shell server returned an error")),
+                Some(Err(err)) => return Err(err.context("shell server returned an error")),
                 None => return Err(Error::msg("did not receive shell started response"))
             },
             _ = delay_for(Duration::from_millis(30000)) =>  return Err(Error::msg("timed out while waiting for shell"))
@@ -99,7 +94,7 @@ impl ShellClient {
         };
         info!("session finished");
 
-        Ok(exit_code?)
+        exit_code
     }
 
     async fn authenticate(&self, stream: &mut ShellStream, key: ShellKey) -> Result<()> {
@@ -109,23 +104,19 @@ impl ShellClient {
         let response = tokio::select! {
             message = stream.next() => match message {
                 Some(Ok(message)) => message,
-                Some(Err(err)) => return Err(Error::from(err).context("shell server returned invalid response")),
+                Some(Err(err)) => return Err(err.context("shell server returned invalid response")),
                 None => return Err(Error::msg("did not receive authentication response"))
             },
             _ = delay_for(Duration::from_millis(3000)) =>  return Err(Error::msg("timed out while waiting for authentication"))
         };
 
         match response {
-            ShellServerMessage::KeyAccepted => return Ok(()),
-            ShellServerMessage::KeyRejected => {
-                return Err(Error::msg("shell key rejected by server"))
-            }
-            message @ _ => {
-                return Err(Error::msg(format!(
-                    "unexpected message returned from server: {:?}",
-                    message
-                )))
-            }
+            ShellServerMessage::KeyAccepted => Ok(()),
+            ShellServerMessage::KeyRejected => Err(Error::msg("shell key rejected by server")),
+            message => Err(Error::msg(format!(
+                "unexpected message returned from server: {:?}",
+                message
+            ))),
         }
     }
 
@@ -165,7 +156,7 @@ impl ShellClient {
                         return Err(Error::msg(format!("received unexpected message from shell server {:?}", message)));
                     }
                     Some(Err(err)) => {
-                        return Err(Error::from(err).context("received invalid message from shell server"));
+                        return Err(err.context("received invalid message from shell server"));
                     }
                     None => {
                         warn!("remote shell stream ended");

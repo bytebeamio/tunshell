@@ -107,7 +107,7 @@ impl Future for WaitingConnections {
             }
         }
 
-        if let None = received {
+        if received.is_none() {
             return Poll::Pending;
         }
 

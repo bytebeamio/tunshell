@@ -80,7 +80,7 @@ impl Client {
             Some(Ok(ServerMessage::KeyRejected)) => {
                 Err(Error::msg("The session key has expired or is invalid"))
             }
-            result @ _ => Err(self.handle_unexpected_message(result)),
+            result => Err(self.handle_unexpected_message(result)),
         }
     }
 
@@ -89,13 +89,11 @@ impl Client {
         message_stream: &mut ClientMessageStream,
     ) -> Result<PeerJoinedPayload> {
         match message_stream.next().await {
-            Some(Ok(ServerMessage::AlreadyJoined)) => {
-                return Err(Error::msg(
-                    "Connection has already been joined by another host",
-                ))
-            }
+            Some(Ok(ServerMessage::AlreadyJoined)) => Err(Error::msg(
+                "Connection has already been joined by another host",
+            )),
             Some(Ok(ServerMessage::PeerJoined(payload))) => Ok(payload),
-            result @ _ => Err(self.handle_unexpected_message(result)),
+            result => Err(self.handle_unexpected_message(result)),
         }
     }
 
@@ -133,7 +131,7 @@ impl Client {
                         ));
                     }
 
-                    let bound = std::mem::replace(&mut bound, None).unwrap();
+                    let bound = bound.take().unwrap();
                     match self
                         .attempt_direct_connection(bound.0, bound.1, ports, master_side)
                         .await?
@@ -159,7 +157,7 @@ impl Client {
                     let relay_stream = Box::new(RelayStream::new(Arc::clone(&message_stream)));
                     break (relay_stream, message_stream);
                 }
-                result @ _ => return Err(self.handle_unexpected_message(result)),
+                result => return Err(self.handle_unexpected_message(result)),
             }
         };
 
@@ -294,7 +292,7 @@ impl Client {
                     let relay_stream = Box::new(RelayStream::new(Arc::clone(&message_stream)));
                     break (relay_stream, message_stream);
                 }
-                result @ _ => return Err(self.handle_unexpected_message(result)),
+                result => return Err(self.handle_unexpected_message(result)),
             }
         };
 
@@ -317,7 +315,7 @@ impl Client {
         })?
         .run(peer_socket, ShellKey::new(self.config.encryption_key()))
         .await
-        .and_then(|_| Ok(0))
+        .map(|_| 0)
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -337,14 +335,12 @@ impl Client {
 
     fn handle_unexpected_message(&self, message: Option<Result<ServerMessage>>) -> Error {
         match message {
-            Some(Ok(message)) => {
-                return Error::msg(format!(
-                    "Unexpected response returned by server: {:?}",
-                    message
-                ))
-            }
-            Some(Err(err)) => return err,
-            None => return Error::msg("Connection closed unexpectedly"),
+            Some(Ok(message)) => Error::msg(format!(
+                "Unexpected response returned by server: {:?}",
+                message
+            )),
+            Some(Err(err)) => err,
+            None => Error::msg("Connection closed unexpectedly"),
         }
     }
 }

@@ -34,17 +34,17 @@ impl cmp::PartialOrd for SequenceNumber {
             let diff = self.0 - other.0;
 
             if diff < u32::MAX / 2 {
-                return Some(cmp::Ordering::Greater);
+                Some(cmp::Ordering::Greater)
             } else {
-                return Some(cmp::Ordering::Less);
+                Some(cmp::Ordering::Less)
             }
         } else {
             let diff = other.0 - self.0;
 
             if diff < u32::MAX / 2 {
-                return Some(cmp::Ordering::Less);
+                Some(cmp::Ordering::Less)
             } else {
-                return Some(cmp::Ordering::Greater);
+                Some(cmp::Ordering::Greater)
             }
         }
     }

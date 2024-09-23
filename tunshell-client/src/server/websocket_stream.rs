@@ -74,7 +74,7 @@ impl AsyncWrite for WebsocketServerStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, io::Error>> {
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
 
         let mut written = 0;
         let max_size = self
@@ -90,7 +90,7 @@ impl AsyncWrite for WebsocketServerStream {
                     .replace(Message::binary(buf[..written].to_vec()));
             }
 
-            if let Poll::Pending = self.inner.poll_ready_unpin(cx) {
+            if self.inner.poll_ready_unpin(cx).is_pending() {
                 return Poll::Pending;
             }
 
@@ -111,7 +111,7 @@ impl AsyncWrite for WebsocketServerStream {
             return Poll::Ready(Ok(()));
         }
 
-        if let Poll::Pending = self.inner.poll_ready_unpin(cx) {
+        if self.inner.poll_ready_unpin(cx).is_pending() {
             return Poll::Pending;
         }
 
@@ -121,11 +121,11 @@ impl AsyncWrite for WebsocketServerStream {
             return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
         }
 
-        if let Poll::Pending = self.inner.poll_flush_unpin(cx) {
+        if self.inner.poll_flush_unpin(cx).is_pending() {
             return Poll::Pending;
         }
 
-        return Poll::Ready(Ok(()));
+        Poll::Ready(Ok(()))
     }
 
     fn poll_shutdown(

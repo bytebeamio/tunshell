@@ -76,13 +76,13 @@ impl AsyncRead for WebSocketStream {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        while self.recv_buff.len() == 0 {
+        while self.recv_buff.is_empty() {
             let message = {
                 let mut ws = self.ws.lock().unwrap();
 
                 let poll = Pin::new(&mut *ws).poll_next(cx);
 
-                let message = match poll {
+                match poll {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(None) => {
                         return Poll::Ready(Err(io::Error::from(io::ErrorKind::NotConnected)))
@@ -91,9 +91,7 @@ impl AsyncRead for WebSocketStream {
                         return Poll::Ready(Err(warp_err_to_io_err(err)))
                     }
                     Poll::Ready(Some(Ok(res))) => res,
-                };
-
-                message
+                }
             };
 
             if message.is_binary() {
@@ -133,7 +131,7 @@ impl AsyncWrite for WebSocketStream {
         };
 
         let len = buf.len();
-        return Poll::Ready(
+        Poll::Ready(
             Pin::new(&mut *ws)
                 .start_send(Message::binary(buf.to_vec()))
                 .map(|_| {
@@ -141,7 +139,7 @@ impl AsyncWrite for WebSocketStream {
                     len
                 })
                 .map_err(warp_err_to_io_err),
-        );
+        )
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {

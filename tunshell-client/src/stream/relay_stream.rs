@@ -1,5 +1,4 @@
 use crate::stream::TunnelStream;
-use tunshell_shared::{ClientMessage, MessageStream, RelayPayload, ServerMessage};
 use futures::stream::Stream;
 use log::debug;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -8,6 +7,7 @@ use std::result::Result as StdResult;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tunshell_shared::{ClientMessage, MessageStream, RelayPayload, ServerMessage};
 
 pub struct RelayStream<S: futures::AsyncRead + futures::AsyncWrite + Unpin> {
     message_stream: Arc<Mutex<MessageStream<ClientMessage, ServerMessage, S>>>,
@@ -31,7 +31,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> RelayStream<S> 
 impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncRead for RelayStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
-        mut cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
         buff: &mut [u8],
     ) -> Poll<StdResult<usize, IoError>> {
         if self.closed {
@@ -39,10 +39,9 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncRead for R
             return Poll::Ready(Ok(0));
         }
 
-        if self.read_buff.len() == 0 {
+        if self.read_buff.is_empty() {
             debug!("poll_read: poll_next underlying message stream");
-            let read_result =
-                Pin::new(&mut *self.message_stream.lock().unwrap()).poll_next(&mut cx);
+            let read_result = Pin::new(&mut *self.message_stream.lock().unwrap()).poll_next(cx);
             debug!("poll_read: read result: {:?}", read_result);
 
             match read_result {
@@ -92,7 +91,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncRead for R
 impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncWrite for RelayStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
-        mut cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
         buff: &[u8],
     ) -> Poll<StdResult<usize, IoError>> {
         if self.closed {
@@ -102,7 +101,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncWrite for 
         // Ensure the write serialises to message under 16KB limit
         let len = std::cmp::min(buff.len(), 10240);
         let write_result = Pin::new(&mut *self.message_stream.lock().unwrap()).poll_write(
-            &mut cx,
+            cx,
             &ClientMessage::Relay(RelayPayload {
                 data: Vec::from(&buff[..len]),
             }),
@@ -116,25 +115,25 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncWrite for 
                     "Error returned from underlying message stream while sending relay message: {}",
                     err
                 );
-                return Poll::Ready(Err(IoError::from(IoErrorKind::Other)));
+                Poll::Ready(Err(IoError::from(IoErrorKind::Other)))
             }
             Poll::Pending => Poll::Pending,
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, mut cx: &mut Context<'_>) -> Poll<StdResult<(), IoError>> {
-        Pin::new(self.message_stream.lock().unwrap().inner_mut()).poll_flush(&mut cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<StdResult<(), IoError>> {
+        Pin::new(self.message_stream.lock().unwrap().inner_mut()).poll_flush(cx)
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
-        mut cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<StdResult<(), IoError>> {
         if !self.sent_close {
             self.sent_close = true;
 
             let write_result = Pin::new(&mut *self.message_stream.lock().unwrap())
-                .poll_write(&mut cx, &ClientMessage::Close);
+                .poll_write(cx, &ClientMessage::Close);
 
             match write_result {
                 Poll::Ready(Ok(_)) => (),
@@ -143,10 +142,9 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncWrite for 
             };
         }
 
-        let close_result =
-            Pin::new(self.message_stream.lock().unwrap().inner_mut()).poll_close(&mut cx);
+        let close_result = Pin::new(self.message_stream.lock().unwrap().inner_mut()).poll_close(cx);
 
-        if let Poll::Ready(_) = close_result {
+        if close_result.is_ready() {
             self.closed = true;
         }
 
@@ -159,10 +157,10 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> TunnelStream fo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tunshell_shared::Message;
     use futures::io::Cursor;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::runtime::Runtime;
+    use tunshell_shared::Message;
 
     #[test]
     fn test_relay_stream_read_valid_messages() {

@@ -13,5 +13,5 @@ pub(super) fn is_session_valid_to_join(session: &Session, key: &str) -> bool {
         return false;
     }
 
-    return true;
+    true
 }

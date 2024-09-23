@@ -1,3 +1,4 @@
+#![allow(unexpected_cfgs)]
 fn main() {
     #[cfg(fuzzing)]
     {
@@ -6,7 +7,7 @@ fn main() {
         use futures::executor::block_on_stream;
         use futures::io::Cursor;
         use tunshell_shared::{ClientMessage, MessageStream, ServerMessage};
-        
+
         fuzz!(|data: &[u8]| {
             let cursor = Cursor::new(data.to_vec());
             let stream_client: MessageStream<ServerMessage, ClientMessage, Cursor<Vec<u8>>> =

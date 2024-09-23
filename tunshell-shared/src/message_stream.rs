@@ -57,12 +57,12 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
 
     fn poll_read_inner_stream(
         self: &mut Pin<&mut Self>,
-        mut cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<usize, std::io::Error>> {
         let mut raw_buff = [0u8; 1024];
         let inner = Pin::new(&mut self.inner);
 
-        match inner.poll_read(&mut cx, &mut raw_buff) {
+        match inner.poll_read(cx, &mut raw_buff) {
             Poll::Ready(Ok(0)) => Poll::Ready(Ok(0)),
             Poll::Ready(Ok(read)) => {
                 self.as_mut().read_buff.extend_from_slice(&raw_buff[..read]);
@@ -166,7 +166,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> Stream for Messa
 impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I, O, S> {
     pub fn poll_write(
         mut self: Pin<&mut Self>,
-        mut cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
         message: &I,
     ) -> Poll<Result<()>> {
         if let Err(err) = self.err_if_closed() {
@@ -181,7 +181,7 @@ impl<I: Message, O: Message, S: AsyncRead + AsyncWrite + Unpin> MessageStream<I,
         let mut written = 0;
 
         while written < buff.len() {
-            let write_result = Pin::new(&mut self.inner).poll_write(&mut cx, &buff[written..]);
+            let write_result = Pin::new(&mut self.inner).poll_write(cx, &buff[written..]);
 
             match write_result {
                 Poll::Ready(Ok(wrote)) => written += wrote,

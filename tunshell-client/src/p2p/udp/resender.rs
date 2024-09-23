@@ -63,10 +63,9 @@ pub(super) fn schedule_resend_if_dropped(
             }
 
             let mut con = loop {
-                match con.try_lock() {
-                    Ok(con) => break con,
-                    Err(_) => {}
-                };
+                if let Ok(con) = con.try_lock() {
+                    break con;
+                }
 
                 tokio::time::delay_for(position_delay).await;
             };

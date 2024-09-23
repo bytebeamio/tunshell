@@ -6,7 +6,7 @@ use std::{
 };
 use tokio::io::AsyncRead;
 
-//// An in-memory buffer with a sync write and an async read half
+/// An in-memory buffer with a sync write and an async read half
 pub(super) struct ByteChannel {
     buff: Vec<u8>,
     read_wakers: Vec<Waker>,
@@ -29,7 +29,7 @@ impl AsyncRead for ByteChannel {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        if self.buff.len() == 0 {
+        if self.buff.is_empty() {
             if self.shutdown {
                 return Poll::Ready(Ok(0));
             }
@@ -46,7 +46,7 @@ impl AsyncRead for ByteChannel {
 
 impl Write for ByteChannel {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Ok(0);
         }
 

@@ -43,7 +43,7 @@ impl SendEventReceiver {
                     None => recv_ended = true,
                 },
                 (packet, idx, _) = future::select_all(&mut self.futures) => {
-                    self.futures.remove(idx);
+                    _ = self.futures.remove(idx);
                     return Some(packet);
                 },
             }
@@ -113,7 +113,7 @@ impl UdpConnectionVars {
     pub(super) fn create_data_packet(&mut self, payload: &[u8]) -> UdpPacket {
         // Only increase the sequence number if the packet contains data
         // This allows ACK/window updates not to incur recursive ACK's from the peer
-        let sequence_number = if payload.len() == 0 {
+        let sequence_number = if payload.is_empty() {
             self.sequence_number
         } else {
             self.sequence_number + SequenceNumber(1)

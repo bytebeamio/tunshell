@@ -4,9 +4,9 @@ mod interpreter;
 mod output_stream;
 mod shell;
 
-pub(self) use byte_channel::*;
-pub(self) use input_stream::*;
-pub(self) use output_stream::*;
-pub(self) use interpreter::*;
+use byte_channel::*;
+use input_stream::*;
+use interpreter::*;
+use output_stream::*;
 
 pub(crate) use shell::*;

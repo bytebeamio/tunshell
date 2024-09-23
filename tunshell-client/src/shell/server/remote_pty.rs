@@ -47,8 +47,8 @@ impl RemotePtyShell {
         let proc = Command::new(path)
             .env("RPTY_TRANSPORT", format!("unix:{sock_path}"))
             .env("TERM", term)
-            .env("PS1", if color { 
-                r"\[\e[0;38;5;242m\][rpty] \[\e[0;92m\]\u\[\e[0;92m\]@\[\e[0;92m\]\H\[\e[0m\]:\[\e[0;38;5;39m\]\w\[\e[0m\]\$ \[\e[0m\]" 
+            .env("PS1", if color {
+                r"\[\e[0;38;5;242m\][rpty] \[\e[0;92m\]\u\[\e[0;92m\]@\[\e[0;92m\]\H\[\e[0m\]:\[\e[0;38;5;39m\]\w\[\e[0m\]\$ \[\e[0m\]"
             } else {
                 r"[rpty] \u@\H:\w\$ "
             })
@@ -95,7 +95,7 @@ impl RemotePtyShell {
                         return Err(Error::msg(format!("received unexpected message from shell client {:?}", message)));
                     }
                     Some(Err(err)) => {
-                        return Err(Error::from(err).context("received invalid message from shell client"));
+                        return Err(err.context("received invalid message from shell client"));
                     }
                     None => {
                         warn!("client shell stream ended");
@@ -165,7 +165,7 @@ impl RemotePtyShell {
         };
 
         let res = con
-            .write_all(&payload.data.as_slice())
+            .write_all(payload.data.as_slice())
             .await
             .context("failed to write to unix stream");
 
@@ -221,18 +221,22 @@ impl RemotePtyShell {
 
 #[async_trait]
 impl Shell for RemotePtyShell {
+    #[allow(clippy::diverging_sub_expression)]
     async fn read(&mut self, _buff: &mut [u8]) -> Result<usize> {
         unreachable!()
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn write(&mut self, _buff: &[u8]) -> Result<()> {
         unreachable!()
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     fn resize(&mut self, _size: WindowSize) -> Result<()> {
         unreachable!()
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     fn exit_code(&self) -> Result<u8> {
         unreachable!()
     }

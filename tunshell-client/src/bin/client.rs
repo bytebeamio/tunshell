@@ -1,5 +1,4 @@
 use anyhow::Error;
-use env_logger;
 use log::error;
 use std::{process::exit, sync::atomic::Ordering};
 use tokio::signal;

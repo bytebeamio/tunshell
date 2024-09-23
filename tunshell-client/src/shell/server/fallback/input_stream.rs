@@ -110,11 +110,11 @@ impl Stream for InputStream {
     type Item = Token;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.tokens.len() == 0 && self.buff.len() > 0 {
+        if self.tokens.is_empty() && !self.buff.is_empty() {
             self.parse_buff();
         }
 
-        if self.tokens.len() > 0 {
+        if !self.tokens.is_empty() {
             return Poll::Ready(Some(self.tokens.remove(0)));
         }
 
@@ -129,7 +129,7 @@ impl Stream for InputStream {
 
 impl Write for InputStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Ok(0);
         }
 

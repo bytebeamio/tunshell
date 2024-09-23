@@ -28,7 +28,7 @@ fn connect_sync() -> Result<Connection> {
     Ok(con)
 }
 
-#[cfg(all(test, integration))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use tokio::runtime::Runtime;

@@ -1,6 +1,4 @@
 use anyhow::Result;
-use env_logger;
-use tokio;
 use tunshell_server::relay;
 
 #[tokio::main]

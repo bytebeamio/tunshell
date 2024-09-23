@@ -74,12 +74,12 @@ impl RecvLoop {
             }
 
             // Prevent the loop from blocking the executor
-            tokio::task::yield_now().await;
+            _ = tokio::task::yield_now().await;
         }
 
         try_disconnect(&self.con);
         debug!("recv loop ended");
-        send_terminator.send(()).unwrap_or_else(|_| ());
+        send_terminator.send(()).unwrap_or(());
         self
     }
 }
@@ -129,12 +129,12 @@ impl SendLoop {
             }
 
             // Prevent the loop from blocking the executor
-            tokio::task::yield_now().await;
+            _ = tokio::task::yield_now().await;
         }
 
         try_disconnect(&self.con);
         debug!("send loop ended");
-        recv_terminator.send(()).unwrap_or_else(|_| ());
+        recv_terminator.send(()).unwrap_or(());
         self
     }
 }
@@ -318,16 +318,16 @@ async fn handle_send_packet(
                 con.increase_transit_window_after_send();
             }
 
-            if packet.payload.len() > 0 {
+            if !packet.payload.is_empty() {
                 schedule_resend_if_dropped(con, packet);
             }
 
-            return Ok(());
+            Ok(())
         }
         UdpPacketType::Close => {
             info!("close packet sent");
             try_disconnect(&con);
-            return Ok(());
+            Ok(())
         }
         _ => panic!("unexpected send packet type"),
     }

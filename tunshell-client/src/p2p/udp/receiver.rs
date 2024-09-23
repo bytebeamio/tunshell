@@ -26,7 +26,7 @@ pub(super) enum UdpRecvError {
 impl UdpConnectionVars {
     pub(super) fn recv_process_packet(&mut self, packet: UdpPacket) -> Result<u32, UdpRecvError> {
         // If the packet is a pure ACK/window update we can ignore it here
-        if packet.payload.len() == 0 {
+        if packet.payload.is_empty() {
             return Ok(0);
         }
 
@@ -108,11 +108,10 @@ impl UdpConnectionVars {
             self.wake_recv_tasks();
         }
 
-        // If we have acknowledged any new bytes we trigger an ack-update 
+        // If we have acknowledged any new bytes we trigger an ack-update
         // event to send through an acknowledgement of the received packets
         if reassembled_bytes > 0 {
-            let result = self.event_sender()
-                .send(SendEvent::AckUpdate);
+            let result = self.event_sender().send(SendEvent::AckUpdate);
 
             if let Err(err) = result {
                 warn!("error while sending ack update event: {}", err);
@@ -143,9 +142,7 @@ impl UdpConnectionVars {
         // When the recv buffer permits a new inbound packet we send the peer
         // a window update
         if original_window < MAX_PACKET_SIZE as u32 && new_window >= MAX_PACKET_SIZE as u32 {
-            let result = self
-                .event_sender()
-                .send(SendEvent::WindowUpdate);
+            let result = self.event_sender().send(SendEvent::WindowUpdate);
 
             if let Err(err) = result {
                 warn!("failed to send window update event: {}", err);
@@ -403,7 +400,7 @@ mod tests {
             let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
             let (tx, _) = tokio::sync::mpsc::unbounded_channel();
             con.event_sender = Some(tx);
-            
+
             let con = Arc::new(Mutex::new(con));
 
             // Create a task which will wait until buffer becomes available.

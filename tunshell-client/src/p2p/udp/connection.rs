@@ -54,18 +54,12 @@ impl UdpConnection {
 
     /// Whether the connection has been activated
     pub fn is_new(&self) -> bool {
-        match &self.state {
-            State::New(_) => true,
-            _ => false,
-        }
+        matches!(&self.state, State::New(_))
     }
 
     /// Whether the connection is bound
     pub fn is_bound(&self) -> bool {
-        match &self.state {
-            State::Bound(_, _) => true,
-            _ => false,
-        }
+        matches!(&self.state, State::Bound(_, _))
     }
 
     /// Whether the connection is in a valid connected state.
@@ -89,7 +83,7 @@ impl UdpConnection {
         };
 
         let con = running.con.lock().unwrap();
-        return !con.is_connected();
+        !con.is_connected()
     }
 
     /// Bind the connection to the UDP socket
@@ -202,7 +196,7 @@ impl UdpConnection {
             return Err(Error::msg("Connection must be in CONNECTED state"));
         }
 
-        self.shutdown().await.map_err(|err| Error::from(err))
+        self.shutdown().await.map_err(Error::from)
     }
 }
 
@@ -226,11 +220,11 @@ impl AsyncRead for UdpConnection {
 
         if con.recv_available_bytes() == 0 {
             con.recv_wakers.push(cx.waker().clone());
-            return Poll::Pending;
+            Poll::Pending
         } else {
             let data = con.recv_drain_bytes(buff.len());
             buff[..data.len()].copy_from_slice(&data[..]);
-            return Poll::Ready(Ok(data.len()));
+            Poll::Ready(Ok(data.len()))
         }
     }
 }
@@ -241,7 +235,7 @@ impl AsyncWrite for UdpConnection {
         cx: &mut Context<'_>,
         buff: &[u8],
     ) -> Poll<io::Result<usize>> {
-        assert!(buff.len() > 0);
+        assert!(!buff.is_empty());
 
         if !self.is_connected() {
             warn!("attempted to poll connection which is not connected");
@@ -320,7 +314,7 @@ impl AsyncWrite for UdpConnection {
         }
 
         self.state = State::Disconnecting(running);
-        return Poll::Pending;
+        Poll::Pending
     }
 }
 
@@ -458,7 +452,7 @@ mod tests {
     fn test_connect_write_then_close_one_side() {
         // TODO: fix flaky test
         if std::env::var("CI").is_ok() {
-            return; 
+            return;
         }
 
         Runtime::new().unwrap().block_on(async {

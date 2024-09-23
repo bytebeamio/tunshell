@@ -65,7 +65,7 @@ impl UdpPacketType {
         }
     }
 
-    pub(super) fn to_byte(&self) -> u8 {
+    pub(super) fn to_byte(self) -> u8 {
         match self {
             Self::Open => 0,
             Self::Data => 1,
@@ -138,7 +138,7 @@ impl UdpPacket {
 
         packet.checksum = packet.calculate_checksum();
 
-        return packet;
+        packet
     }
 
     pub(super) fn open(
@@ -293,7 +293,7 @@ mod tests {
             length: 3,
             checksum: 0,
             payload: vec![1, 2, 3, 4],
-            resend_count: 0
+            resend_count: 0,
         };
 
         assert_eq!(packet.calculate_checksum(), 2061921599);

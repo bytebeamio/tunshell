@@ -10,7 +10,7 @@ pub struct Key(LessSafeKey, Vec<u8>);
 impl Clone for Key {
     fn clone(&self) -> Self {
         Self(
-            LessSafeKey::new(UnboundKey::new(&self.0.algorithm(), self.1.as_slice()).unwrap()),
+            LessSafeKey::new(UnboundKey::new(self.0.algorithm(), self.1.as_slice()).unwrap()),
             self.1.clone(),
         )
     }

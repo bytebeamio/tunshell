@@ -54,7 +54,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> ClientMessageSt
 
         match message {
             ClientMessage::Key(key) => Ok(key),
-            message @ _ => Err(Error::msg(format!(
+            message => Err(Error::msg(format!(
                 "unexpected message received from client, expecting key, got {:?}",
                 message
             ))),

@@ -42,7 +42,7 @@ impl AsyncRead for OutputStream {
 
 impl Write for OutputStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Ok(0);
         }
 
@@ -54,12 +54,14 @@ impl Write for OutputStream {
             written += 1;
         }
 
-        for i in written..buf.len() {
+        let mut i = written;
+        while i < buf.len() {
             if i > 0 && buf[i] == LF && buf[i - 1] != CR {
                 self.inner.write_all(&buf[written..i])?;
                 self.inner.write_all(&[CR, LF])?;
                 written = i + 1;
             }
+            i += 1;
         }
 
         self.inner.write_all(&buf[written..])?;

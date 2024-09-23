@@ -42,13 +42,13 @@ impl PtyShell {
                 .with_context(|| "could not open pty")
         });
 
-        if let Err(_) = pty {
+        if pty.is_err() {
             return Err(Error::msg("failed to init pty system"));
         }
 
         let pty = pty.unwrap();
 
-        if let Err(_) = pty {
+        if pty.is_err() {
             return Err(Error::msg("failed to init pty"));
         }
 
@@ -160,7 +160,7 @@ impl PtyShell {
 #[async_trait]
 impl Shell for PtyShell {
     async fn read(&mut self, buff: &mut [u8]) -> Result<usize> {
-        while self.recv_buff.len() == 0 {
+        while self.recv_buff.is_empty() {
             let stdout = match self.reader_rx.recv().await {
                 Some(data) => data,
                 None => {
@@ -218,16 +218,17 @@ impl Shell for PtyShell {
         false
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn stream_io(&mut self, _stream: &mut ShellStream) -> Result<()> {
         unreachable!()
     }
 }
 
-impl Into<PtySize> for WindowSize {
-    fn into(self) -> PtySize {
+impl From<WindowSize> for PtySize {
+    fn from(val: WindowSize) -> PtySize {
         PtySize {
-            cols: self.0,
-            rows: self.1,
+            cols: val.0,
+            rows: val.1,
             pixel_width: 0,
             pixel_height: 0,
         }
@@ -317,10 +318,10 @@ impl Drop for PtyShell {
     }
 }
 
-impl Into<CommandBuilder> for DefaultShell {
-    fn into(self) -> CommandBuilder {
-        let mut cmd = CommandBuilder::new(self.path);
-        cmd.args(self.args);
+impl From<DefaultShell> for CommandBuilder {
+    fn from(shell: DefaultShell) -> Self {
+        let mut cmd = CommandBuilder::new(shell.path);
+        cmd.args(shell.args);
         cmd
     }
 }

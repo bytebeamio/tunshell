@@ -114,10 +114,16 @@ async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection)
         (ClientMessage::DirectConnectBound(ports1), ClientMessage::DirectConnectBound(ports2)) => {
             (ports1, ports2)
         }
-        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectBound(_)) => return Ok(false),
-        (ClientMessage::DirectConnectBound(_), ClientMessage::DirectConnectFailed) => return Ok(false),
-        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectFailed) => return Ok(false),
-        msgs @ _ => {
+        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectBound(_)) => {
+            return Ok(false)
+        }
+        (ClientMessage::DirectConnectBound(_), ClientMessage::DirectConnectFailed) => {
+            return Ok(false)
+        }
+        (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectFailed) => {
+            return Ok(false)
+        }
+        msgs => {
             return Err(Error::msg(format!(
                 "unexpected message while attempting to bind for direct connection: {:?}",
                 msgs
@@ -125,25 +131,28 @@ async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection)
         }
     };
 
-    let supports_matching_protocols = match (&ports1, &ports2) {
+    let supports_matching_protocols = matches!(
+        (&ports1, &ports2),
         (
             PortBindings {
-                tcp_port: Some(_), ..
+                tcp_port: Some(_),
+                ..
             },
             PortBindings {
-                tcp_port: Some(_), ..
+                tcp_port: Some(_),
+                ..
             },
-        ) => true,
-        (
+        ) | (
             PortBindings {
-                udp_port: Some(_), ..
+                udp_port: Some(_),
+                ..
             },
             PortBindings {
-                udp_port: Some(_), ..
+                udp_port: Some(_),
+                ..
             },
-        ) => true,
-        _ => false,
-    };
+        )
+    );
 
     if !supports_matching_protocols {
         debug!("cannot attempt direct connection due to mismatch of port binding protocols");
@@ -164,7 +173,7 @@ async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection)
     let result = match (result1, result2) {
         (ClientMessage::DirectConnectSucceeded, ClientMessage::DirectConnectSucceeded) => true,
         (ClientMessage::DirectConnectFailed, ClientMessage::DirectConnectFailed) => false,
-        msgs @ _ => {
+        msgs => {
             return Err(Error::msg(format!(
                 "unexpected message while attempting direct connection: {:?}",
                 msgs

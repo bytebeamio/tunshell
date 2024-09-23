@@ -34,10 +34,7 @@ pub(super) async fn negotiate_connection(
     // If one of the peers is not behind a NAT, this received the hello packet.
     // We then connect on the outbound port received from the hello packet.
     let peer_addr = wait_for_magic_hello(socket, peer_ip, timeout).await?;
-    socket
-        .connect(peer_addr)
-        .await
-        .map_err(|err| Error::from(err))?;
+    socket.connect(peer_addr).await?;
 
     // We send a second hello packet to the same port as received from the hello packet.
     // In the case where neither peers are behind NAT's the packet can be ignored.
@@ -343,7 +340,10 @@ mod tests {
             let con1 = task.await.unwrap();
 
             assert_eq!(sync_packet.sequence_number, con1.sequence_number);
-            assert_eq!(sync_packet.sequence_number, con1.peer_ack_number + SequenceNumber(1));
+            assert_eq!(
+                sync_packet.sequence_number,
+                con1.peer_ack_number + SequenceNumber(1)
+            );
             assert_eq!(con1.peer_window, 5000);
             assert_eq!(con1.state, UdpConnectionState::SentSync);
         });
@@ -403,7 +403,10 @@ mod tests {
             let con1 = task.await.unwrap();
 
             assert_eq!(reply_packet.sequence_number, con1.sequence_number);
-            assert_eq!(reply_packet.sequence_number, con1.peer_ack_number + SequenceNumber(1));
+            assert_eq!(
+                reply_packet.sequence_number,
+                con1.peer_ack_number + SequenceNumber(1)
+            );
             assert_eq!(con1.peer_window, 5000);
             assert_eq!(con1.state, UdpConnectionState::WaitingForSync);
         });

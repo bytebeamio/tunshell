@@ -54,7 +54,7 @@ impl TlsListener {
                     _ = terminate_rx.recv() => break
                 };
 
-                if let Err(_) = con_tx.send(incoming).await {
+                if con_tx.send(incoming).await.is_err() {
                     break;
                 }
             }
@@ -117,7 +117,7 @@ mod tests {
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         runtime::Runtime,
-        time::delay_for
+        time::delay_for,
     };
     use tokio_rustls::{client, TlsConnector};
 

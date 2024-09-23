@@ -27,7 +27,7 @@ impl ServerStream {
 
         let connection: Box<dyn super::AsyncIO> = match connection {
             Ok(Ok(con)) => Box::new(con),
-            err @ _ => {
+            err => {
                 error!(
                     "Failed to connect via TLS, falling back to websocket: {}",
                     match err {

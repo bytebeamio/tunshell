@@ -29,7 +29,7 @@ pub(super) struct StartShellPayload {
     pub(super) term: String,
     pub(super) color: bool,
     pub(super) size: WindowSize,
-    pub(super) remote_pty_support: bool
+    pub(super) remote_pty_support: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -39,22 +39,21 @@ pub(super) struct WindowSize(pub(super) u16, pub(super) u16);
 pub(super) enum ShellStartedPayload {
     LocalPty,
     RemotePty,
-    Fallback
+    Fallback,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub(super) enum RemotePtyEventPayload {
     Connect(u32),
     Payload(RemotePtyDataPayload),
-    Close(u32)
+    Close(u32),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub(super) struct RemotePtyDataPayload {
     pub con_id: u32,
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
-
 
 pub(super) type ShellClientStream<S> = MessageStream<ShellClientMessage, ShellServerMessage, S>;
 
@@ -94,7 +93,7 @@ impl Message for ShellClientMessage {
             4 => Self::Resize(serde_json::from_slice(raw_message.data().as_slice())?),
             5 => Self::RemotePtyData(serde_json::from_slice(raw_message.data().as_slice())?),
             255 => Self::Error(String::from_utf8(raw_message.data().clone())?),
-            id @ _ => {
+            id => {
                 return Err(Error::msg(format!(
                     "Unknown type id for ShellClientMessage: {}",
                     id
@@ -139,13 +138,13 @@ impl Message for ShellServerMessage {
             2 => Self::KeyRejected,
             3 => Self::ShellStarted(serde_json::from_slice(raw_message.data().as_slice())?),
             4 => Self::Stdout(raw_message.data().clone()),
-            5 => Self::Exited(raw_message.data().get(0).map_or_else(
+            5 => Self::Exited(raw_message.data().first().map_or_else(
                 || Err(Error::msg("encountered exit message without exit code")),
                 |v| Ok(*v),
             )?),
             6 => Self::RemotePtyEvent(serde_json::from_slice(raw_message.data().as_slice())?),
             255 => Self::Error(String::from_utf8(raw_message.data().clone())?),
-            id @ _ => {
+            id => {
                 return Err(Error::msg(format!(
                     "Unknown type id for ShellServerMessage: {}",
                     id
@@ -188,7 +187,7 @@ mod tests {
             term: "test".to_owned(),
             color: true,
             size: WindowSize(100, 50),
-            remote_pty_support: false
+            remote_pty_support: false,
         });
         let serialised = message.serialise().unwrap();
 
@@ -196,7 +195,9 @@ mod tests {
             serialised,
             RawMessage::new(
                 2,
-                "{\"term\":\"test\",\"color\":true,\"size\":[100,50],\"remote_pty_support\":false}".as_bytes().to_vec()
+                "{\"term\":\"test\",\"color\":true,\"size\":[100,50],\"remote_pty_support\":false}"
+                    .as_bytes()
+                    .to_vec()
             )
             .unwrap()
         );
@@ -262,7 +263,14 @@ mod tests {
         let message = ShellServerMessage::ShellStarted(ShellStartedPayload::LocalPty);
         let serialised = message.serialise().unwrap();
 
-        assert_eq!(serialised, RawMessage::new(3, serde_json::to_vec(&ShellStartedPayload::LocalPty).unwrap()).unwrap());
+        assert_eq!(
+            serialised,
+            RawMessage::new(
+                3,
+                serde_json::to_vec(&ShellStartedPayload::LocalPty).unwrap()
+            )
+            .unwrap()
+        );
 
         let deserialised = ShellServerMessage::deserialise(&serialised).unwrap();
 

@@ -22,19 +22,19 @@ pub(super) struct EncryptedMessage {
 
 impl Message for EncryptedMessage {
     fn type_id(&self) -> u8 {
-        return 0;
+        0
     }
 
     fn serialise(&self) -> Result<RawMessage> {
         let mut cursor = Cursor::new(vec![]);
 
         cursor.write_u8(self.nonce.len() as u8).unwrap();
-        cursor.write(self.nonce.as_slice()).unwrap();
+        cursor.write_all(self.nonce.as_slice()).unwrap();
 
         cursor
             .write_u16::<BigEndian>(self.ciphertext.len() as u16)
             .unwrap();
-        cursor.write(self.ciphertext.as_slice()).unwrap();
+        cursor.write_all(self.ciphertext.as_slice()).unwrap();
 
         RawMessage::new(self.type_id(), cursor.into_inner())
     }
@@ -66,7 +66,7 @@ pub struct AesStream<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send>
 
 enum CryptoState<R> {
     Swapping,
-    Pending(Key),
+    Pending(Box<Key>),
     Crypting(BoxFuture<'static, Result<(R, Key)>>),
 }
 
@@ -78,8 +78,8 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AesStream<S> {
 
         Ok(Self {
             inner: AesMessageStream::new(inner),
-            encrypt: CryptoState::Pending(key.clone()),
-            decrypt: CryptoState::Pending(key),
+            encrypt: CryptoState::Pending(Box::new(key.clone())),
+            decrypt: CryptoState::Pending(Box::new(key)),
             read_buff: vec![],
             write_buff: None,
         })
@@ -94,7 +94,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncRead for A
     ) -> Poll<io::Result<usize>> {
         debug!("reading from aes stream");
 
-        while self.read_buff.len() == 0 {
+        while self.read_buff.is_empty() {
             match std::mem::replace(&mut self.decrypt, CryptoState::Swapping) {
                 CryptoState::Crypting(mut fut) => {
                     let result = match fut.as_mut().poll(cx) {
@@ -112,7 +112,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncRead for A
 
                     let (plaintext, key) = result.unwrap();
                     self.read_buff.extend_from_slice(plaintext.as_slice());
-                    self.decrypt = CryptoState::Pending(key);
+                    self.decrypt = CryptoState::Pending(Box::new(key));
                 }
                 CryptoState::Pending(key) => {
                     let message = match Pin::new(&mut self.inner).poll_next(cx) {
@@ -128,7 +128,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncRead for A
                         }
                     };
 
-                    self.decrypt = CryptoState::Crypting(decrypt(message, key).boxed());
+                    self.decrypt = CryptoState::Crypting(decrypt(message, *key).boxed());
                 }
                 CryptoState::Swapping => unreachable!(),
             }
@@ -149,7 +149,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncWrite for 
         cx: &mut Context<'_>,
         buff: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        if buff.len() > 0 {
+        if !buff.is_empty() {
             debug!("sending {} bytes", buff.len());
         }
 
@@ -158,7 +158,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncWrite for 
         while self.write_buff.is_none() {
             match std::mem::replace(&mut self.encrypt, CryptoState::Swapping) {
                 CryptoState::Pending(key) => {
-                    self.encrypt = CryptoState::Crypting(encrypt(buff.to_vec(), key).boxed());
+                    self.encrypt = CryptoState::Crypting(encrypt(buff.to_vec(), *key).boxed());
                     poll = Poll::Ready(Ok(buff.len()));
                 }
                 CryptoState::Crypting(mut fut) => {
@@ -178,7 +178,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncWrite for 
                     let (encrypted, key) = result.unwrap();
                     debug!("encrypted into {} bytes", encrypted.ciphertext.len());
                     self.write_buff.replace(encrypted);
-                    self.encrypt = CryptoState::Pending(key);
+                    self.encrypt = CryptoState::Pending(Box::new(key));
                 }
                 CryptoState::Swapping => unreachable!(),
             }
@@ -187,19 +187,19 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncWrite for 
         let message = self.write_buff.take().unwrap();
         match Pin::new(&mut self.inner).poll_write(cx, &message) {
             Poll::Ready(Ok(_)) => {
-                return if buff.len() == 0 {
+                if buff.is_empty() {
                     Poll::Ready(Ok(0))
                 } else {
-                    return poll;
+                    poll
                 }
             }
             Poll::Ready(Err(err)) => {
                 warn!("encountered error while writing to inner stream: {}", err);
-                return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
+                Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)))
             }
             Poll::Pending => {
                 self.write_buff.replace(message);
-                return poll;
+                poll
             }
         }
     }

@@ -1,4 +1,6 @@
-use super::{ShellClientMessage, ShellServerMessage, ShellServerStream, proto::ShellStartedPayload};
+use super::{
+    proto::ShellStartedPayload, ShellClientMessage, ShellServerMessage, ShellServerStream,
+};
 use crate::{ShellKey, TunnelStream};
 use anyhow::{Error, Result};
 use futures::stream::StreamExt;
@@ -11,7 +13,7 @@ mod fallback;
 use fallback::*;
 
 mod default;
-pub(self) use default::*;
+use default::*;
 
 mod shell;
 use shell::*;
@@ -58,7 +60,9 @@ impl ShellServer {
         let (shell_type, mut shell) = self.start_shell(&mut stream).await?;
         info!("shell started");
 
-        stream.write(&ShellServerMessage::ShellStarted(shell_type)).await?;
+        stream
+            .write(&ShellServerMessage::ShellStarted(shell_type))
+            .await?;
 
         if shell.custom_io_handling() {
             shell.stream_io(&mut stream).await?;
@@ -80,7 +84,7 @@ impl ShellServer {
             message = stream.next() => match message {
                 Some(Ok(ShellClientMessage::Key(key))) => key,
                 Some(Ok(message)) => return Err(Error::msg(format!("received unexpected message from client: {:?}", message))),
-                Some(Err(err)) => return Err(Error::from(err).context("received invalid message from client")),
+                Some(Err(err)) => return Err(err.context("received invalid message from client")),
                 None => return Err(Error::msg("client did not sent key"))
             },
             _ = time::delay_for(Duration::from_millis(3000)) => return Err(Error::msg("timed out while waiting for key"))
@@ -89,19 +93,22 @@ impl ShellServer {
         // TODO: timing safe comparison
         if received_key == key.key() {
             stream.write(&ShellServerMessage::KeyAccepted).await?;
-            return Ok(());
+            Ok(())
         } else {
             stream.write(&ShellServerMessage::KeyRejected).await?;
-            return Err(Error::msg("client key rejected"));
+            Err(Error::msg("client key rejected"))
         }
     }
 
-    async fn start_shell(&self, stream: &mut ShellStream) -> Result<(ShellStartedPayload, Box<dyn Shell + Send>)> {
+    async fn start_shell(
+        &self,
+        stream: &mut ShellStream,
+    ) -> Result<(ShellStartedPayload, Box<dyn Shell + Send>)> {
         let request = tokio::select! {
             message = stream.next() => match message {
                 Some(Ok(ShellClientMessage::StartShell(request))) => request,
                 Some(Ok(message)) => return Err(Error::msg(format!("received unexpected message from client: {:?}", message))),
-                Some(Err(err)) => return Err(Error::from(err).context("received invalid message from client")),
+                Some(Err(err)) => return Err(err.context("received invalid message from client")),
                 None => return Err(Error::msg("client did not send start shell message"))
             },
             _ = time::delay_for(Duration::from_millis(3000)) => return Err(Error::msg("timed out while waiting for shell request"))
@@ -119,7 +126,10 @@ impl ShellServer {
             warn!("failed to init pty shell: {:?}", pty_shell.err().unwrap());
         }
 
-        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+        #[cfg(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))]
         if request.remote_pty_support {
             debug!("initialising remote pty shell");
             let rpty_shell = RemotePtyShell::new(&request.term, request.color).await;
@@ -128,7 +138,10 @@ impl ShellServer {
                 return Ok((ShellStartedPayload::RemotePty, Box::new(rpty_shell)));
             }
 
-            warn!("failed to init remote pty shell: {:?}", rpty_shell.err().unwrap());
+            warn!(
+                "failed to init remote pty shell: {:?}",
+                rpty_shell.err().unwrap()
+            );
         }
 
         debug!("falling back to in-built shell");
@@ -190,7 +203,7 @@ impl ShellServer {
                         return Err(Error::msg(format!("received unexpected message from shell client {:?}", message)));
                     }
                     Some(Err(err)) => {
-                        return Err(Error::from(err).context("received invalid message from shell client"));
+                        return Err(err.context("received invalid message from shell client"));
                     }
                     None => {
                         warn!("client shell stream ended");
@@ -303,7 +316,7 @@ mod tests {
                     term: "TERM".to_owned(),
                     color: true,
                     size: WindowSize(50, 50),
-                    remote_pty_support: false
+                    remote_pty_support: false,
                 })
                 .serialise()
                 .unwrap()

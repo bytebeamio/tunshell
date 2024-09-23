@@ -26,7 +26,7 @@ pub enum ClientMode {
 
 impl Config {
     pub fn new_from_env() -> Self {
-        let mut args = env::args().into_iter();
+        let mut args = env::args();
 
         args.next().expect("first argument must be set");
 
@@ -48,10 +48,10 @@ impl Config {
         let mut echo_stdout = false;
 
         // Parse optional args
-        while let Some(arg) = args.next() {
+        for arg in args {
             match arg.as_str() {
                 "--echo" => echo_stdout = true,
-                arg @ _ => panic!("Unknown argument: {}", arg),
+                arg => panic!("Unknown argument: {}", arg),
             }
         }
 
@@ -78,6 +78,7 @@ impl Config {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         mode: ClientMode,
         client_key: &str,

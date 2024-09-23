@@ -172,7 +172,7 @@ impl Interpreter {
     }
 
     fn previous_in_history(&mut self) -> Result<()> {
-        if self.history_pos == 0 || self.history.len() == 0 {
+        if self.history_pos == 0 || self.history.is_empty() {
             return Ok(());
         }
 
@@ -209,7 +209,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn refresh_line(&mut self, mut update_cb: impl FnMut(&mut Self) -> ()) -> Result<()> {
+    fn refresh_line(&mut self, mut update_cb: impl FnMut(&mut Self)) -> Result<()> {
         let original_len = self.line_buff.len();
         let original_pos = self.cursor_pos;
 
@@ -254,13 +254,13 @@ impl Interpreter {
     fn write_prompt(&mut self) -> Result<()> {
         let mut state = self.state.inner.lock().unwrap();
         let pwd = state.pwd.clone();
-        state.output.write(
+        state.output.write_all(
             pwd.file_name()
                 .map(|i| i.to_string_lossy().to_string())
                 .unwrap_or("/".to_owned())
                 .as_bytes(),
         )?;
-        state.output.write("> ".as_bytes())?;
+        state.output.write_all("> ".as_bytes())?;
         Ok(())
     }
 
@@ -269,7 +269,7 @@ impl Interpreter {
             return Err(Error::msg("shell has exited"));
         }
 
-        if cmd.len() == 0 {
+        if cmd.is_empty() {
             return Ok(());
         }
 
@@ -296,7 +296,7 @@ impl Interpreter {
         if !new_pwd.exists() {
             state
                 .output
-                .write(format!("no such directory: {}", dir).as_bytes())?;
+                .write_all(format!("no such directory: {}", dir).as_bytes())?;
             return Ok(());
         }
 
@@ -345,7 +345,7 @@ impl Interpreter {
             // to that shell for execution to enable near full shell command capability
             let path = delegate_shell.path.clone();
             let args = delegate_shell
-                .get_execute_command_args(program, args.iter().cloned().collect())
+                .get_execute_command_args(program, args.to_vec())
                 .unwrap();
             let mut cmd = Command::new(path.clone());
             cmd.args(args.clone());
@@ -356,7 +356,7 @@ impl Interpreter {
         } else {
             // In the case of no shells available on the system we fallback to executing
             // the programs directly
-            let mut cmd = Command::new(program.to_owned());
+            let mut cmd = Command::new(program);
             cmd.args(args.clone());
 
             debug!("created command: {} {:?}", program.to_owned(), args);
@@ -394,7 +394,7 @@ impl Interpreter {
                             process.kill()?; // TODO: replace with SIGTERM on unix
                             debug!("killed child process");
                         },
-                        data @ _ => {
+                        data => {
                             let data = data.to_bytes();
                             stdin.write_all(data).await?;
                             debug!("wrote {} bytes to process stdin", data.len());

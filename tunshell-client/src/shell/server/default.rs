@@ -32,7 +32,7 @@ impl DefaultShell {
             )));
         }
 
-        return Ok(());
+        Ok(())
     }
 
     pub(super) fn can_delegate(&self) -> bool {
@@ -65,24 +65,23 @@ impl DefaultShell {
 #[cfg(not(target_os = "windows"))]
 pub(super) fn get_default_shell(shell: Option<&str>) -> Result<DefaultShell> {
     // Copied from portable_pty
-    let mut shell =
-        shell
-            .and_then(|i| Some(i.to_owned()))
-            .unwrap_or(std::env::var("SHELL").or_else(|_| {
-                let ent = unsafe { libc::getpwuid(libc::getuid()) };
+    let mut shell = shell
+        .map(|i| i.to_owned())
+        .unwrap_or(std::env::var("SHELL").or_else(|_| {
+            let ent = unsafe { libc::getpwuid(libc::getuid()) };
 
-                if ent.is_null() {
-                    Ok("/bin/sh".into())
-                } else {
-                    use std::ffi::CStr;
-                    use std::str;
-                    let shell = unsafe { CStr::from_ptr((*ent).pw_shell) };
-                    shell
-                        .to_str()
-                        .map(str::to_owned)
-                        .context("failed to resolve shell")
-                }
-            })?);
+            if ent.is_null() {
+                Ok("/bin/sh".into())
+            } else {
+                use std::ffi::CStr;
+                use std::str;
+                let shell = unsafe { CStr::from_ptr((*ent).pw_shell) };
+                shell
+                    .to_str()
+                    .map(str::to_owned)
+                    .context("failed to resolve shell")
+            }
+        })?);
 
     if !shell.parse::<PathBuf>()?.exists() || shell == "nologin" || shell.ends_with("/nologin") {
         shell = "/bin/sh".to_owned();

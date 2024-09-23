@@ -52,12 +52,12 @@ impl FallbackShell {
     fn write_notice(&mut self) -> Result<()> {
         let mut state = self.state.inner.lock().unwrap();
 
-        state.output.write("\r\n".as_bytes())?;
-        state.output.write("NOTICE: Tunshell is running in a limited environment and is unable to allocate a pty for a real shell. ".as_bytes())?;
-        state.output.write(
+        state.output.write_all("\r\n".as_bytes())?;
+        state.output.write_all("NOTICE: Tunshell is running in a limited environment and is unable to allocate a pty for a real shell. ".as_bytes())?;
+        state.output.write_all(
             "Falling back to a built-in pseudo-shell with very limited functionality".as_bytes(),
         )?;
-        state.output.write("\r\n\r\n".as_bytes())?;
+        state.output.write_all("\r\n\r\n".as_bytes())?;
 
         Ok(())
     }
@@ -101,6 +101,7 @@ impl Shell for FallbackShell {
         false
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn stream_io(&mut self, _stream: &mut ShellStream) -> Result<()> {
         unreachable!()
     }
@@ -128,7 +129,7 @@ impl SharedState {
         self.inner.lock().unwrap().exit_code
     }
 
-    pub(super) fn read_input<'a>(&'a mut self) -> impl Future<Output = Result<Token>> + 'a {
+    pub(super) fn read_input(&mut self) -> impl Future<Output = Result<Token>> + '_ {
         futures::future::poll_fn(move |cx| {
             let mut state = self.inner.lock().unwrap();
             let result = Pin::new(&mut state.input).poll_next(cx);
