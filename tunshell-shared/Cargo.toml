@@ -7,12 +7,14 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-anyhow = "1.0"
-futures = "0.3.5"
-futures-test = "0.3.5"
-log = "0.4.8"
+anyhow = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 [target.'cfg(fuzzing)'.dependencies]
 afl = "0.8.0"
+
+[dev-dependencies]
+futures-test = "0.3.5"
