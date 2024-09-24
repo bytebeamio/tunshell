@@ -1,10 +1,10 @@
+use futures::AsyncRead;
 use io::Write;
 use std::{
     cmp, io,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use tokio::io::AsyncRead;
 
 /// An in-memory buffer with a sync write and an async read half
 pub(super) struct ByteChannel {
@@ -81,8 +81,9 @@ impl ByteChannel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::AsyncReadExt;
     use std::time::Duration;
-    use tokio::{io::AsyncReadExt, runtime::Runtime, time::timeout};
+    use tokio::{runtime::Runtime, time::timeout};
 
     #[test]
     fn test_new() {

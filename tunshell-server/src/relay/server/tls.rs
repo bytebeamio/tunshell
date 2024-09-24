@@ -1,8 +1,8 @@
-use super::{super::config::Config, IoStream};
+use super::super::config::Config;
 use anyhow::{Error, Result};
 use log::*;
 use mpsc::{Receiver, Sender};
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::Ipv4Addr;
 use std::{sync::Arc, time::Duration};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -18,11 +18,11 @@ pub(super) struct TlsListener {
     terminate_tx: Sender<()>,
 }
 
-impl IoStream for TlsStream<TcpStream> {
-    fn get_peer_addr(&self) -> Result<SocketAddr> {
-        self.get_ref().0.peer_addr().map_err(Error::from)
-    }
-}
+// impl IoStream for TlsStream<TcpStream> {
+//     fn get_peer_addr(&self) -> Result<SocketAddr> {
+//         self.get_ref().0.peer_addr().map_err(Error::from)
+//     }
+// }
 
 impl TlsListener {
     pub(super) async fn bind(config: &Config) -> Result<Self> {
@@ -45,7 +45,7 @@ impl TlsListener {
         mut tls: TlsAcceptor,
         mut terminate_rx: Receiver<()>,
     ) -> (JoinHandle<()>, Receiver<Result<TlsStream<TcpStream>>>) {
-        let (mut con_tx, con_rx) = mpsc::channel(128);
+        let (con_tx, con_rx) = mpsc::channel(128);
 
         let task = tokio::spawn(async move {
             loop {
@@ -113,11 +113,11 @@ mod tests {
     use crate::relay::server::tests::insecure_tls_config;
     use futures::FutureExt;
     use lazy_static::lazy_static;
-    use std::{net::SocketAddr, sync::Mutex};
+    use std::{convert::TryInto, net::SocketAddr, sync::Mutex};
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         runtime::Runtime,
-        time::delay_for,
+        time::sleep,
     };
     use tokio_rustls::{client, TlsConnector};
 
@@ -148,10 +148,7 @@ mod tests {
         let client_config = insecure_tls_config();
 
         let client = TlsConnector::from(Arc::new(client_config))
-            .connect(
-                webpki::DNSNameRef::try_from_ascii("localhost".as_bytes()).unwrap(),
-                client,
-            )
+            .connect("localhost".try_into().unwrap(), client)
             .await
             .unwrap();
 
@@ -192,7 +189,7 @@ mod tests {
             let mut listener = init_server(&mut config).await;
             let (client_con1, client_con2) = futures::join!(
                 init_connection(config.tls_port),
-                delay_for(Duration::from_millis(100)).then(|_| init_connection(config.tls_port))
+                sleep(Duration::from_millis(100)).then(|_| init_connection(config.tls_port))
             );
 
             let server_con1 = listener.accept().await.unwrap();

@@ -1,41 +1,37 @@
 use anyhow::{Error, Result};
-use futures::StreamExt;
+use futures::{AsyncRead, AsyncWrite, StreamExt};
 use log::*;
 use std::time::Duration;
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    time::timeout,
-};
-use tokio_util::compat::*;
+use tokio::time::timeout;
 use tunshell_shared::{ClientMessage, KeyPayload, MessageStream, ServerMessage};
 
 type MessageStreamInner<IO> = MessageStream<ServerMessage, ClientMessage, IO>;
 
 pub(super) struct ClientMessageStream<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> {
-    stream: Option<MessageStreamInner<Compat<IO>>>,
+    stream: Option<MessageStreamInner<IO>>,
     closed: bool,
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> ClientMessageStream<IO> {
     pub(super) fn new(stream: IO) -> Self {
         Self {
-            stream: Some(MessageStreamInner::new(stream.compat())),
+            stream: Some(MessageStreamInner::new(stream)),
             closed: false,
         }
     }
 
     #[allow(dead_code)]
-    pub(super) fn stream(&self) -> &MessageStreamInner<Compat<IO>> {
+    pub(super) fn stream(&self) -> &MessageStreamInner<IO> {
         self.stream.as_ref().unwrap()
     }
 
-    pub(super) fn stream_mut(&mut self) -> &mut MessageStreamInner<Compat<IO>> {
+    pub(super) fn stream_mut(&mut self) -> &mut MessageStreamInner<IO> {
         self.stream.as_mut().unwrap()
     }
 
     #[allow(dead_code)]
     pub(super) fn inner(&self) -> &IO {
-        self.stream().inner().get_ref()
+        self.stream().inner()
     }
 
     pub(super) async fn next(&mut self) -> Result<ClientMessage> {
@@ -80,7 +76,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static> Drop for Client
 }
 
 fn try_send_close<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
-    mut stream: MessageStreamInner<Compat<IO>>,
+    mut stream: MessageStreamInner<IO>,
 ) {
     // In the case of the client closing the ClientMessageStream early
     // there is no need to send a close message
@@ -95,7 +91,7 @@ fn try_send_close<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
             .await
             .unwrap_or_else(|err| warn!("error while sending close: {}", err));
         // Allow for final messages to be received by waiting before closing connection
-        tokio::time::delay_for(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
         // TCP connection closed here
     });
 }

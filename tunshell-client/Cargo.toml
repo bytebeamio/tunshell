@@ -43,16 +43,14 @@ async-tungstenite = { version = "0.8.0", features = ["tokio-runtime"] } #no-wasm
 crossterm = { version = "0.23.2" }
 libc = "0.2.71"
 tokio = { workspace = true, features = [
-    "rt-threaded",
-    "dns",
+    "rt-multi-thread",
     "io-std",
-    "tcp",
-    "udp",
+    "io-util",
+    "net",
     "sync",
     "process",
     "signal",
     "fs",
-    "uds",
 ] } #no-wasm
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

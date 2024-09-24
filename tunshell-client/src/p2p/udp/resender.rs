@@ -55,7 +55,7 @@ pub(super) fn schedule_resend_if_dropped(
         // to lock the connection for other purposes, this avoids a potential deadlock.
         let (packet, event_sender) = loop {
             let resend_delay = (rtt_estimate * 2 * (resend_count + 1) as u32) + position_delay;
-            tokio::time::delay_for(resend_delay).await;
+            tokio::time::sleep(resend_delay).await;
 
             if con.is_poisoned() {
                 warn!("cannot resend packet: lock poisoned");
@@ -67,7 +67,7 @@ pub(super) fn schedule_resend_if_dropped(
                     break con;
                 }
 
-                tokio::time::delay_for(position_delay).await;
+                tokio::time::sleep(position_delay).await;
             };
 
             if !con.is_connected() {
@@ -251,7 +251,7 @@ mod tests {
             }
 
             // Wait for resend task to fire
-            tokio::time::delay_for(Duration::from_millis(25)).await;
+            tokio::time::sleep(Duration::from_millis(25)).await;
             // Should not have removed from sent_packets
             let result = rx.try_recv();
             assert!(result.is_err());
@@ -295,7 +295,7 @@ mod tests {
             }
 
             // Wait for resend task to fire
-            tokio::time::delay_for(Duration::from_millis(250)).await;
+            tokio::time::sleep(Duration::from_millis(250)).await;
 
             // Should remove packet from sent_packets map
             {
@@ -342,7 +342,7 @@ mod tests {
             }
 
             // Wait for resend task to fire
-            tokio::time::delay_for(Duration::from_millis(250)).await;
+            tokio::time::sleep(Duration::from_millis(250)).await;
 
             // Should not remove packet from sent_packets map
             {
@@ -379,7 +379,7 @@ mod tests {
             schedule_resend_if_dropped(Arc::clone(&con), sent_packet.clone());
 
             // Wait for resend task to fire
-            tokio::time::delay_for(Duration::from_millis(1010)).await;
+            tokio::time::sleep(Duration::from_millis(1010)).await;
 
             // Should send close event
             let result = rx.try_recv();

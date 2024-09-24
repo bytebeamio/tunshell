@@ -1,6 +1,6 @@
 cfg_if::cfg_if! {
     if #[cfg(not(target_arch = "wasm32"))] {
-        use tokio::io::{AsyncRead, AsyncWrite};
+        use futures::{AsyncRead, AsyncWrite};
 
         pub trait AsyncIO : AsyncRead + AsyncWrite + Send + Unpin {}
 

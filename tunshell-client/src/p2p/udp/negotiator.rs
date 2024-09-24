@@ -5,7 +5,7 @@ use rand::Rng;
 use std::net::{IpAddr, SocketAddr};
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 /// This magic string is exchanged between peers
 /// in verifying that they are both attempting to establish a connection
@@ -95,7 +95,7 @@ async fn wait_for_magic_hello(
             Ok((read, addr)) => (read, addr),
             Err(err) => return Err(Error::from(err)).context("failed to wait for magic hello packet"),
         },
-        _ = delay_for(timeout) => return Err(Error::msg("timed out while waiting for magic hello"))
+        _ = sleep(timeout) => return Err(Error::msg("timed out while waiting for magic hello"))
     };
     if &buff[..read] != MAGIC_HELLO {
         return Err(Error::msg(
@@ -148,7 +148,7 @@ async fn wait_for_sync_packet(
                 Ok(read) => read,
                 Err(err) => return Err(Error::from(err)).context("failed to wait for sync packet"),
             },
-            _ = delay_for(timeout) => return Err(Error::msg("timed out while waiting for sync"))
+            _ = sleep(timeout) => return Err(Error::msg("timed out while waiting for sync"))
         };
 
         // If neither of the peers are behind NAT's
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn test_negotiate_connection_master_side() {
         Runtime::new().unwrap().block_on(async {
-            let (mut socket1, mut socket2) = init_udp_socket_pair().await;
+            let (mut socket1, socket2) = init_udp_socket_pair().await;
 
             let addr1 = socket1.local_addr().unwrap();
             let addr2 = socket2.local_addr().unwrap();
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn test_negotiate_connection_non_master_side() {
         Runtime::new().unwrap().block_on(async {
-            let (mut socket1, mut socket2) = init_udp_socket_pair().await;
+            let (mut socket1, socket2) = init_udp_socket_pair().await;
 
             let addr1 = socket1.local_addr().unwrap();
             let addr2 = socket2.local_addr().unwrap();

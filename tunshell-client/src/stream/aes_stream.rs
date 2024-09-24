@@ -2,6 +2,7 @@ use super::{crypto::*, TunnelStream};
 use anyhow::{Context as AnyhowContext, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use futures::{future::BoxFuture, FutureExt, Stream};
+use futures::{AsyncRead, AsyncWrite};
 use io::prelude::*;
 use log::*;
 use std::cmp;
@@ -11,7 +12,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
 use tunshell_shared::{Message, MessageStream, RawMessage};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -222,10 +222,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> AsyncWrite for 
         Pin::new(self.inner.inner_mut()).poll_flush(cx)
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Pin::new(self.inner.inner_mut()).poll_close(cx)
     }
 }
@@ -236,7 +233,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Unpin + Send> TunnelStream fo
 mod tests {
     use super::*;
     use futures::io::Cursor;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use futures::{AsyncReadExt, AsyncWriteExt};
     use tokio::runtime::Runtime;
 
     #[test]

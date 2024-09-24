@@ -1,5 +1,6 @@
 use anyhow::{Error, Result};
-use rustls::{internal::pemfile, Certificate, NoClientAuth, PrivateKey, ServerConfig};
+use rustls::server::NoClientAuth;
+use rustls::{Certificate, PrivateKey, ServerConfig};
 use std::fs;
 use std::io;
 use std::{env, sync::Arc, time::Duration};
@@ -30,11 +31,14 @@ impl Config {
         let tls_cert_path = env::var("TLS_RELAY_CERT")?;
         let tls_key_path = env::var("TLS_RELAY_PRIVATE_KEY")?;
 
-        let mut tls_config = ServerConfig::new(NoClientAuth::new());
-        tls_config.set_single_cert(
-            Self::parse_tls_cert(tls_cert_path.clone())?,
-            Self::parse_tls_private_key(tls_key_path.clone())?,
-        )?;
+        let cert_verifier = Arc::new(NoClientAuth);
+        let tls_config = ServerConfig::builder()
+            .with_safe_defaults()
+            .with_client_cert_verifier(cert_verifier)
+            .with_single_cert(
+                Self::parse_tls_cert(tls_cert_path.clone())?,
+                Self::parse_tls_private_key(tls_key_path.clone())?,
+            )?;
         let tls_config = Arc::new(tls_config);
 
         Ok(Config {
@@ -56,17 +60,24 @@ impl Config {
         let file = fs::File::open(path)?;
         let mut reader = io::BufReader::new(file);
 
-        pemfile::certs(&mut reader).map_err(|_| Error::msg("failed to parse tls cert file"))
+        let certs = rustls_pemfile::certs(&mut reader)?;
+
+        Ok(certs.into_iter().map(Certificate).collect())
     }
 
     pub(super) fn parse_tls_private_key(path: String) -> Result<PrivateKey> {
         let file = fs::File::open(path)?;
         let mut reader = io::BufReader::new(file);
 
-        let keys = pemfile::pkcs8_private_keys(&mut reader)
-            .map_err(|_| Error::msg("failed to parse tls private key file"))?;
+        let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
 
-        Ok(keys.into_iter().next().unwrap())
+        match keys.len() {
+            0 => Err(Error::msg("No PKCS8-encoded private key found in {path}")),
+            1 => Ok(PrivateKey(keys.remove(0))),
+            _ => Err(Error::msg(
+                "More than one PKCS8-encoded private key found in {path}",
+            )),
+        }
     }
 }
 

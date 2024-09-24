@@ -1,6 +1,6 @@
 use crate::Config;
 use anyhow::{bail, Context as AnyhowContext, Result};
-use std::{net::ToSocketAddrs, time::Duration};
+use std::net::ToSocketAddrs;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -30,9 +30,9 @@ impl TcpServerStream {
             TcpStream::connect(relay_addr).await?
         };
 
-        if let Err(err) = network_stream.set_keepalive(Some(Duration::from_secs(30))) {
-            log::warn!("failed to set tcp keepalive: {}", err);
-        }
+        // if let Err(err) = network_stream.set_keepalive(Some(Duration::from_secs(30))) {
+        //     log::warn!("failed to set tcp keepalive: {}", err);
+        // }
 
         Ok(Self {
             inner: network_stream,

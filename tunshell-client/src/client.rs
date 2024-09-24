@@ -7,10 +7,9 @@ use anyhow::{Error, Result};
 use futures::{future, stream::StreamExt, FutureExt};
 use log::*;
 use std::sync::{Arc, Mutex};
-use tokio_util::compat::*;
 use tunshell_shared::*;
 
-pub type ClientMessageStream = MessageStream<ClientMessage, ServerMessage, Compat<ServerStream>>;
+pub type ClientMessageStream = MessageStream<ClientMessage, ServerMessage, ServerStream>;
 
 pub struct Client {
     config: Config,
@@ -33,7 +32,7 @@ impl Client {
         self.println("Connecting to relay server...").await;
         let relay_socket = ServerStream::connect(&self.config).await?;
 
-        let mut message_stream = ClientMessageStream::new(relay_socket.compat());
+        let mut message_stream = ClientMessageStream::new(relay_socket);
 
         self.send_key(&mut message_stream).await?;
 
@@ -164,7 +163,7 @@ impl Client {
         assert!(peer_info.session_nonce.len() > 10);
 
         let stream = AesStream::new(
-            stream.compat(),
+            stream,
             peer_info.session_nonce.as_bytes(),
             self.config.encryption_key().as_bytes(),
         )

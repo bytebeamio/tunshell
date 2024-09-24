@@ -2,18 +2,16 @@ use super::tls_stream::TlsServerStream;
 use crate::Config;
 use anyhow::Result;
 use async_tungstenite::{client_async, tungstenite::Message, WebSocketStream};
-use futures::{stream::StreamExt, SinkExt};
+use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use log::*;
 use std::{
     cmp, io,
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_util::compat::*;
 
 pub struct WebsocketServerStream {
-    inner: WebSocketStream<Compat<TlsServerStream>>,
+    inner: WebSocketStream<TlsServerStream>,
 
     read_buff: Vec<u8>,
     write_buff: Option<Message>,
@@ -28,7 +26,7 @@ impl WebsocketServerStream {
             config.relay_host(),
             config.relay_ws_port()
         );
-        let (websocket_stream, _) = client_async(url, tls_stream.compat()).await?;
+        let (websocket_stream, _) = client_async(url, tls_stream).await?;
 
         Ok(Self {
             inner: websocket_stream,
@@ -128,10 +126,7 @@ impl AsyncWrite for WebsocketServerStream {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.inner.poll_close_unpin(cx).map_err(|err| {
             error!("error while closing to websocket: {}", err);
             io::Error::from(io::ErrorKind::BrokenPipe)

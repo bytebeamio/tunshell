@@ -5,11 +5,10 @@ use super::{
 use anyhow::{Error, Result};
 use log::*;
 use std::sync::{Arc, Mutex};
-use tokio::net::udp::{RecvHalf, SendHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 pub(super) struct UdpConnectionOrchestrator {
     con: Arc<Mutex<UdpConnectionVars>>,
@@ -27,23 +26,23 @@ enum OrchestratorState {
 }
 
 struct RecvLoop {
-    socket: RecvHalf,
+    socket: Arc<UdpSocket>,
     con: Arc<Mutex<UdpConnectionVars>>,
 }
 
 struct SendLoop {
-    socket: SendHalf,
+    socket: Arc<UdpSocket>,
     con: Arc<Mutex<UdpConnectionVars>>,
     event_receiver: SendEventReceiver,
 }
 
 impl RecvLoop {
-    pub(super) fn new(socket: RecvHalf, con: Arc<Mutex<UdpConnectionVars>>) -> Self {
+    pub(super) fn new(socket: Arc<UdpSocket>, con: Arc<Mutex<UdpConnectionVars>>) -> Self {
         Self { socket, con }
     }
 
     async fn start(
-        mut self,
+        self,
         mut recv_terminator: UnboundedReceiver<()>,
         send_terminator: UnboundedSender<()>,
     ) -> Self {
@@ -64,7 +63,7 @@ impl RecvLoop {
                     Ok(read) => handle_recv_packet(Arc::clone(&self.con), &recv_buff[..read]),
                     Err(err) => Err(Error::from(err))
                 },
-                _ = delay_for(recv_timeout) => handle_recv_timeout(Arc::clone(&self.con)),
+                _ = sleep(recv_timeout) => handle_recv_timeout(Arc::clone(&self.con)),
                 _ = recv_terminator.recv() => break
             };
 
@@ -86,7 +85,7 @@ impl RecvLoop {
 
 impl SendLoop {
     pub(super) fn new(
-        socket: SendHalf,
+        socket: Arc<UdpSocket>,
         con: Arc<Mutex<UdpConnectionVars>>,
         event_receiver: SendEventReceiver,
     ) -> Self {
@@ -116,10 +115,10 @@ impl SendLoop {
                 result = self.event_receiver.wait_for_next_sendable_packet(
                     Arc::clone(&self.con)
                 ) => match result {
-                    Some(packet) => handle_send_packet(Arc::clone(&self.con), packet, &mut self.socket).await,
+                    Some(packet) => handle_send_packet(Arc::clone(&self.con), packet, Arc::clone(&self.socket)).await,
                     None => Err(Error::msg("send channel has been dropped"))
                 },
-                _ = delay_for(keep_alive_interval) => handle_keep_alive(Arc::clone(&self.con), &mut self.socket).await,
+                _ = sleep(keep_alive_interval) => handle_keep_alive(Arc::clone(&self.con), Arc::clone(&self.socket)).await,
                 _ = send_terminator.recv() => break
             };
 
@@ -145,14 +144,14 @@ impl UdpConnectionOrchestrator {
         con: Arc<Mutex<UdpConnectionVars>>,
         send_receiver: UnboundedReceiver<SendEvent>,
     ) -> Self {
-        let (recv, send) = socket.split();
+        let socket = Arc::new(socket);
 
         Self {
             con: Arc::clone(&con),
             state: OrchestratorState::Waiting(
-                RecvLoop::new(recv, Arc::clone(&con)),
+                RecvLoop::new(Arc::clone(&socket), Arc::clone(&con)),
                 SendLoop::new(
-                    send,
+                    socket,
                     Arc::clone(&con),
                     SendEventReceiver::new(send_receiver),
                 ),
@@ -290,9 +289,9 @@ fn handle_recv_timeout(con: Arc<Mutex<UdpConnectionVars>>) -> Result<()> {
 async fn handle_send_packet(
     con: Arc<Mutex<UdpConnectionVars>>,
     packet: UdpPacket,
-    socket_send: &mut SendHalf,
+    socket: Arc<UdpSocket>,
 ) -> Result<()> {
-    match socket_send.send(&packet.to_vec()[..]).await {
+    match socket.send(&packet.to_vec()[..]).await {
         Ok(_) => {}
         Err(err) => return Err(Error::from(err)),
     }
@@ -335,7 +334,7 @@ async fn handle_send_packet(
 
 async fn handle_keep_alive(
     con: Arc<Mutex<UdpConnectionVars>>,
-    socket_send: &mut SendHalf,
+    socket: Arc<UdpSocket>,
 ) -> Result<()> {
     let keep_alive_packet = {
         let mut con = con.lock().unwrap();
@@ -345,7 +344,7 @@ async fn handle_keep_alive(
     };
 
     debug!("sending keep alive packet");
-    handle_send_packet(con, keep_alive_packet, socket_send).await
+    handle_send_packet(con, keep_alive_packet, socket).await
 }
 
 #[cfg(test)]
@@ -415,7 +414,7 @@ mod tests {
     fn test_recv_single_packet() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default();
-            let (mut orchestrator, con, _, mut socket) =
+            let (mut orchestrator, con, _, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -430,7 +429,7 @@ mod tests {
                 .unwrap();
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             // Should successfully receive packet
             let mut con = con.lock().unwrap();
@@ -445,7 +444,7 @@ mod tests {
     fn test_recv_single_packet_update_peer_state() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default();
-            let (mut orchestrator, con, _, mut socket) =
+            let (mut orchestrator, con, _, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -460,7 +459,7 @@ mod tests {
                 .unwrap();
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             // Should successfully receive packet
             let con = con.lock().unwrap();
@@ -475,7 +474,7 @@ mod tests {
     fn test_recv_out_of_order_packets() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default();
-            let (mut orchestrator, con, _, mut socket) =
+            let (mut orchestrator, con, _, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -490,7 +489,7 @@ mod tests {
                 .unwrap();
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             // Should not receive data until gap is filled
             {
@@ -512,7 +511,7 @@ mod tests {
                 .unwrap();
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             // Should successfully reassemble data
             let mut con = con.lock().unwrap();
@@ -528,7 +527,7 @@ mod tests {
     fn test_recv_packet_with_invalid_checksum() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default();
-            let (mut orchestrator, con, _, mut socket) =
+            let (mut orchestrator, con, _, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -539,7 +538,7 @@ mod tests {
             socket.send(packet.to_vec().as_slice()).await.unwrap();
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             // Should discard packet with invalid checksum
             {
@@ -556,7 +555,7 @@ mod tests {
     fn test_recv_packet_sends_ack_update() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default().with_recv_window(1000);
-            let (mut orchestrator, _, _, mut socket) =
+            let (mut orchestrator, _, _, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -571,7 +570,7 @@ mod tests {
                 .unwrap();
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             let mut buff = [0u8; 1024];
             let received = socket.recv(&mut buff).await.unwrap();
@@ -588,7 +587,7 @@ mod tests {
     fn test_send_single_packet() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default();
-            let (mut orchestrator, con, tx, mut socket) =
+            let (mut orchestrator, con, tx, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -603,7 +602,7 @@ mod tests {
             };
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             let mut buff = [0u8; 1024];
             let received = socket.recv(&mut buff).await.unwrap();
@@ -617,7 +616,7 @@ mod tests {
     fn test_send_and_handle_ack() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default();
-            let (mut orchestrator, con, tx, mut socket) =
+            let (mut orchestrator, con, tx, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -633,7 +632,7 @@ mod tests {
             };
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             {
                 let con = con.lock().unwrap();
@@ -654,7 +653,7 @@ mod tests {
                 .unwrap();
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             {
                 let con = con.lock().unwrap();
@@ -677,7 +676,7 @@ mod tests {
     fn test_wait_until_peer_window_permits_new_packet() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default().with_recv_window(1000);
-            let (mut orchestrator, con, tx, mut socket) =
+            let (mut orchestrator, con, tx, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -693,7 +692,7 @@ mod tests {
             };
 
             // Packet should not send due to zero window
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             {
                 let con = con.lock().unwrap();
@@ -712,7 +711,7 @@ mod tests {
                 .unwrap();
 
             // Wait for packet to send and process
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             {
                 let con = con.lock().unwrap();
@@ -736,7 +735,7 @@ mod tests {
     fn test_resends_dropped_packet() {
         Runtime::new().unwrap().block_on(async {
             let config = UdpConnectionConfig::default().with_recv_window(1000);
-            let (mut orchestrator, con, tx, mut socket) =
+            let (mut orchestrator, con, tx,  socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
@@ -753,7 +752,7 @@ mod tests {
             };
 
             // Wait for packet to send
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             let mut buff = [0u8; 1024];
             let received = socket.recv(&mut buff).await.unwrap();
@@ -771,7 +770,7 @@ mod tests {
             }
 
             // Wait for 2.5 RTT to force packet to reset
-            tokio::time::delay_for(Duration::from_millis(200)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
 
             let mut buff = [0u8; 1024];
             let received = socket.recv(&mut buff).await.unwrap();
@@ -799,7 +798,7 @@ mod tests {
                 .unwrap();
 
             // Wait for ack to be received and processed
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             {
                 let con = con.lock().unwrap();
@@ -809,11 +808,11 @@ mod tests {
             }
 
             // Wait for 2.5 RTT to verify acknowledged packet is not resent
-            tokio::time::delay_for(Duration::from_millis(200)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
 
             tokio::select! {
                 _ = socket.recv(&mut buff) => panic!("packet should not be resent after being acknowledged by the peer"),
-                _ = delay_for(Duration::from_millis(10)) => {}
+                _ = sleep(Duration::from_millis(10)) => {}
             }
         });
     }
@@ -833,7 +832,7 @@ mod tests {
             orchestrator.start_orchestration_loop();
 
             // Wait for recv timeout
-            tokio::time::delay_for(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             {
                 let con = con.lock().unwrap();
@@ -849,14 +848,14 @@ mod tests {
             let config = UdpConnectionConfig::default()
                 .with_recv_window(1000)
                 .with_keep_alive_interval(Duration::from_millis(50));
-            let (mut orchestrator, _, _, mut socket) =
+            let (mut orchestrator, _, _, socket) =
                 init_udp_orchestrator_and_raw_socket(config).await;
 
             orchestrator.start_orchestration_loop();
 
             for _ in 1..=3 {
                 // Wait for keep alive interval
-                tokio::time::delay_for(Duration::from_millis(60)).await;
+                tokio::time::sleep(Duration::from_millis(60)).await;
 
                 let mut buff = [0u8; 1024];
                 let received = socket.recv(&mut buff).await.unwrap();

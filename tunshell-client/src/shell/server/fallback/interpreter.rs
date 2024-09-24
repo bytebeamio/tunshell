@@ -333,7 +333,7 @@ impl Interpreter {
         let mut process = process.unwrap();
         self.stream_process_io(&mut process).await?;
 
-        let exit_status = process.await?;
+        let exit_status = process.wait().await?;
         debug!("cmd exited with: {}", exit_status);
 
         Ok(())
@@ -391,7 +391,7 @@ impl Interpreter {
                 token = self.state.read_input() => {
                     match token? {
                         Token::ControlC => {
-                            process.kill()?; // TODO: replace with SIGTERM on unix
+                            process.kill().await?; // TODO: replace with SIGTERM on unix
                             debug!("killed child process");
                         },
                         data => {
@@ -426,7 +426,7 @@ mod tests {
     use super::*;
     use crate::shell::proto::WindowSize;
     use std::time::Duration;
-    use tokio::{runtime::Runtime, time::delay_for};
+    use tokio::{runtime::Runtime, time::sleep};
 
     fn init_interpreter() -> SharedState {
         let state = SharedState::new(WindowSize(100, 100));
@@ -469,7 +469,7 @@ mod tests {
             write_input(&mut state, "echo test\r".as_bytes());
 
             // Let process execute
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             write_input(&mut state, "exit\r".as_bytes());
 
@@ -499,7 +499,7 @@ mod tests {
             write_input(&mut state, "goodbye\r".as_bytes());
 
             // Let process execute
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             write_input(&mut state, "exit\r".as_bytes());
 
@@ -531,7 +531,7 @@ mod tests {
             write_input(&mut state, "buffa\r".as_bytes());
 
             // Let process execute
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             write_input(&mut state, "exit\r".as_bytes());
 
@@ -580,12 +580,12 @@ mod tests {
 
             write_input(&mut state, "/bin/sh\r".as_bytes());
 
-            delay_for(Duration::from_millis(1000)).await;
+            sleep(Duration::from_millis(1000)).await;
 
             // Send interrupt to process
             write_input(&mut state, Token::ControlC.to_bytes());
 
-            delay_for(Duration::from_millis(1000)).await;
+            sleep(Duration::from_millis(1000)).await;
 
             write_input(&mut state, "exit\r".as_bytes());
 
@@ -610,18 +610,18 @@ mod tests {
             write_input(&mut state, "echo first\r".as_bytes());
 
             // Wait for process to finish
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             write_input(&mut state, "echo second\r".as_bytes());
 
             // Wait for process to finish
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             // Navigate to and re-execute first command
             write_input(&mut state, Token::UpArrow.to_bytes().repeat(2).as_slice());
             write_input(&mut state, Token::Enter.to_bytes());
 
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             write_input(&mut state, "exit\r".as_bytes());
 
@@ -645,19 +645,19 @@ mod tests {
             write_input(&mut state, "echo first\r".as_bytes());
 
             // Wait for process to finish
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             write_input(&mut state, "echo second\r".as_bytes());
 
             // Wait for process to finish
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             // Navigate to and re-execute second command
             write_input(&mut state, Token::UpArrow.to_bytes().repeat(2).as_slice());
             write_input(&mut state, Token::DownArrow.to_bytes());
             write_input(&mut state, Token::Enter.to_bytes());
 
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
 
             write_input(&mut state, "exit\r".as_bytes());
 

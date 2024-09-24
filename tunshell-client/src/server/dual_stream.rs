@@ -2,16 +2,14 @@ use super::tls_stream::TlsServerStream;
 use super::websocket_stream::WebsocketServerStream;
 use crate::Config;
 use anyhow::Result;
+use futures::{AsyncRead, AsyncWrite};
 use log::*;
 use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    time::timeout,
-};
+use tokio::time::timeout;
 
 pub struct ServerStream {
     inner: Box<dyn super::AsyncIO>,
@@ -74,10 +72,7 @@ impl AsyncWrite for ServerStream {
         Pin::new(&mut self.inner).poll_flush(cx)
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.inner).poll_close(cx)
     }
 }

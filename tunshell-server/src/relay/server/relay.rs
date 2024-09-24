@@ -97,7 +97,11 @@ pub(super) fn pair_connections(
 
 // 22 alphanurmeric chars ~= 131 bits of entropy
 fn generate_secure_nonce() -> String {
-    thread_rng().sample_iter(&Alphanumeric).take(22).collect()
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(22)
+        .map(char::from)
+        .collect()
 }
 
 async fn attempt_direct_connection(con1: &mut Connection, con2: &mut Connection) -> Result<bool> {

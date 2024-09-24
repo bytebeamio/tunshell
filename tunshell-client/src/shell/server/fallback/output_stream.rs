@@ -1,11 +1,11 @@
 use super::ByteChannel;
+use futures::AsyncRead;
 use io::Write;
 use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::io::AsyncRead;
 
 const CR: u8 = 0x0D;
 const LF: u8 = 0x0A;
@@ -78,7 +78,8 @@ impl Write for OutputStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::{io::AsyncReadExt, runtime::Runtime};
+    use futures::AsyncReadExt;
+    use tokio::runtime::Runtime;
 
     #[test]
     fn test_new() {

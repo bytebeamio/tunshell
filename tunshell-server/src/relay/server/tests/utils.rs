@@ -5,11 +5,12 @@ use anyhow::{Error, Result};
 use db::{Participant, Session};
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use rustls::ClientConfig;
+use rustls::{client::ServerName, Certificate, ClientConfig};
 use std::{
+    convert::TryInto,
     net::{Ipv4Addr, SocketAddr},
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use tokio::sync::mpsc;
 use tokio::{net::TcpStream, task::JoinHandle};
@@ -40,7 +41,7 @@ pub(super) struct TerminableServer {
 }
 
 impl TerminableServer {
-    pub(super) async fn stop(mut self) -> Result<Server<warp::http::StatusCode>> {
+    pub(super) async fn stop(self) -> Result<Server<warp::http::StatusCode>> {
         self.terminate.send(()).await?;
         self.running.await.map_err(Error::from)
     }
@@ -79,7 +80,7 @@ pub(super) async fn init_server(mut server_config: Config) -> TerminableServer {
             break;
         }
 
-        tokio::time::delay_for(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     TerminableServer {
@@ -101,10 +102,7 @@ pub(super) async fn create_client_connection_to_server(
     .unwrap();
 
     let client = TlsConnector::from(Arc::new(insecure_tls_config()))
-        .connect(
-            webpki::DNSNameRef::try_from_ascii("localhost".as_bytes()).unwrap(),
-            client,
-        )
+        .connect("localhost".try_into().unwrap(), client)
         .await
         .unwrap();
 
@@ -113,34 +111,33 @@ pub(super) async fn create_client_connection_to_server(
 
 pub(crate) struct NullCertVerifier {}
 
-impl rustls::ServerCertVerifier for NullCertVerifier {
+impl rustls::client::ServerCertVerifier for NullCertVerifier {
     fn verify_server_cert(
         &self,
-        _roots: &rustls::RootCertStore,
-        _presented_certs: &[rustls::Certificate],
-        _dns_name: webpki::DNSNameRef,
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
+        _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
-    ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        Ok(rustls::ServerCertVerified::assertion())
+        _now: SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
     }
 }
 
 pub(crate) fn insecure_tls_config() -> ClientConfig {
-    let mut client_config = ClientConfig::default();
+    let client_config = ClientConfig::builder()
+        .with_safe_defaults()
+        .with_custom_certificate_verifier(Arc::new(NullCertVerifier {}));
 
     let conf = Config::from_env().unwrap();
+
     client_config
-        .set_single_client_cert(
+        .with_client_auth_cert(
             Config::parse_tls_cert(conf.tls_cert_path).unwrap(),
             Config::parse_tls_private_key(conf.tls_key_path).unwrap(),
         )
-        .unwrap();
-
-    client_config
-        .dangerous()
-        .set_certificate_verifier(Arc::new(NullCertVerifier {}));
-
-    client_config
+        .unwrap()
 }
 
 pub(super) async fn create_mock_session() -> Session {

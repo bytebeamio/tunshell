@@ -66,7 +66,7 @@ impl<R: Reply + 'static> Server<R> {
                 accepted = &mut self.connections.new => { self.handle_accepted_connection(accepted); },
                 closed = &mut self.connections.waiting => { self.handle_closed_waiting_connection(closed); },
                 finished = &mut self.connections.paired => { self.handle_finished_connection(finished); }
-                _ = tokio::time::delay_until(next_clean_at) => {
+                _ = tokio::time::sleep_until(next_clean_at) => {
                     self.clean_expired_connections();
                     next_clean_at = tokio::time::Instant::now() + self.config.expired_connection_clean_interval;
                 }

@@ -1,13 +1,12 @@
 use super::{
     ShellClientMessage, ShellClientStream, ShellServerMessage, StartShellPayload, WindowSize,
 };
-use crate::{shell::proto::ShellStartedPayload, util::delay::delay_for, ShellKey, TunnelStream};
+use crate::{shell::proto::ShellStartedPayload, util::delay::sleep, ShellKey, TunnelStream};
 
 use anyhow::{Context, Error, Result};
 use futures::stream::StreamExt;
 use log::*;
 use std::time::Duration;
-use tokio_util::compat::*;
 
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
@@ -29,7 +28,7 @@ pub struct ShellClient {
     pub(crate) host_shell: HostShell,
 }
 
-type ShellStream = ShellClientStream<Compat<Box<dyn TunnelStream>>>;
+type ShellStream = ShellClientStream<Box<dyn TunnelStream>>;
 
 impl ShellClient {
     pub(crate) fn new(host_shell: HostShell) -> Result<ShellClient> {
@@ -42,7 +41,7 @@ impl ShellClient {
         key: ShellKey,
     ) -> Result<u8> {
         info!("connecting to shell server");
-        let mut stream = ShellStream::new(stream.compat());
+        let mut stream = ShellStream::new(stream);
 
         info!("shell client attempting to authenticate");
         self.authenticate(&mut stream, key)
@@ -73,7 +72,7 @@ impl ShellClient {
                 Some(Err(err)) => return Err(err.context("shell server returned an error")),
                 None => return Err(Error::msg("did not receive shell started response"))
             },
-            _ = delay_for(Duration::from_millis(30000)) =>  return Err(Error::msg("timed out while waiting for shell"))
+            _ = sleep(Duration::from_millis(30000)) =>  return Err(Error::msg("timed out while waiting for shell"))
         };
 
         let exit_code = if let ShellStartedPayload::RemotePty = response {
@@ -107,7 +106,7 @@ impl ShellClient {
                 Some(Err(err)) => return Err(err.context("shell server returned invalid response")),
                 None => return Err(Error::msg("did not receive authentication response"))
             },
-            _ = delay_for(Duration::from_millis(3000)) =>  return Err(Error::msg("timed out while waiting for authentication"))
+            _ = sleep(Duration::from_millis(3000)) =>  return Err(Error::msg("timed out while waiting for authentication"))
         };
 
         match response {
@@ -198,7 +197,7 @@ mod tests {
                     .as_slice(),
             );
 
-            let mock_stream = Cursor::new(mock_data).compat();
+            let mock_stream = Cursor::new(mock_data);
 
             ShellClient::new(HostShell::new().unwrap())
                 .unwrap()
@@ -213,7 +212,7 @@ mod tests {
         Runtime::new().unwrap().block_on(async {
             let mock_data = Vec::<u8>::new();
 
-            let mock_stream = Cursor::new(mock_data).compat();
+            let mock_stream = Cursor::new(mock_data);
 
             timeout(
                 Duration::from_millis(5000),
@@ -240,7 +239,7 @@ mod tests {
                     .as_slice(),
             );
 
-            let mock_stream = Cursor::new(mock_data).compat();
+            let mock_stream = Cursor::new(mock_data);
 
             timeout(
                 Duration::from_millis(5000),

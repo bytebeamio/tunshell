@@ -5,7 +5,7 @@ use futures::StreamExt;
 use std::time::Duration;
 use tokio::{
     runtime::Runtime,
-    time::{delay_for, timeout},
+    time::{sleep, timeout},
 };
 use tokio_util::compat::*;
 use tunshell_shared::{
@@ -22,7 +22,7 @@ fn test_init_server() {
     Runtime::new().unwrap().block_on(async {
         let server = init_server(Config::from_env().unwrap()).await;
 
-        delay_for(Duration::from_millis(100)).await;
+        sleep(Duration::from_millis(100)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -42,13 +42,13 @@ fn test_connect_to_server_without_sending_key_timeout() {
         let mut con = create_client_connection_to_server(&server).await;
 
         // Wait for timeout
-        delay_for(Duration::from_millis(200)).await;
+        sleep(Duration::from_millis(200)).await;
 
         let message = con.next().await.unwrap().unwrap();
 
         assert_eq!(message, ServerMessage::Close);
 
-        delay_for(Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(10)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -102,7 +102,7 @@ fn test_close_connection_while_waiting_for_peer() {
             // Connection should drop here
         }
 
-        delay_for(Duration::from_millis(100)).await;
+        sleep(Duration::from_millis(100)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -125,7 +125,7 @@ fn test_connect_with_valid_client_key() {
 
         assert_next_message_is_key_accepted(&mut con).await;
 
-        delay_for(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(50)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -155,7 +155,7 @@ fn test_connect_with_invalid_key() {
 
         assert_eq!(response, ServerMessage::KeyRejected);
 
-        delay_for(Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(10)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -186,7 +186,7 @@ fn test_connect_and_joined_twice_with_same_key() {
         );
         assert_eq!(con2.next().await.unwrap().unwrap(), ServerMessage::Close);
 
-        delay_for(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(50)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -216,7 +216,7 @@ fn test_connect_with_to_expired_session() {
 
         assert_eq!(response, ServerMessage::KeyRejected);
 
-        delay_for(Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(10)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -242,7 +242,7 @@ fn test_clean_expired_waiting_connections() {
         assert_next_message_is_key_accepted(&mut con).await;
 
         // Wait for connection to be cleaned up by gc timeout
-        delay_for(Duration::from_millis(1000)).await;
+        sleep(Duration::from_millis(1000)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -275,7 +275,7 @@ fn test_paired_connection() {
         send_key_to_server(&mut con_client, &mock_session.peer2.key).await;
         assert_next_message_is_key_accepted(&mut con_client).await;
 
-        delay_for(Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(10)).await;
 
         let server = server.stop().await.unwrap();
 
@@ -384,7 +384,7 @@ fn test_direct_connection() {
         con_client.write(&ClientMessage::Close).await.unwrap();
 
         // Wait for socket to be closed
-        delay_for(Duration::from_millis(1100)).await;
+        sleep(Duration::from_millis(1100)).await;
 
         con_host
             .next()
@@ -493,7 +493,7 @@ fn test_relayed_connection() {
         con_client.write(&ClientMessage::Close).await.unwrap();
 
         // Wait for socket to be closed
-        delay_for(Duration::from_millis(1100)).await;
+        sleep(Duration::from_millis(1100)).await;
 
         con_host
             .next()
@@ -566,7 +566,7 @@ fn test_clean_up_paired_connection() {
             .unwrap();
 
         // Wait for connection to expire
-        delay_for(Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(500)).await;
 
         assert_eq!(
             con_host.next().await.unwrap().unwrap(),

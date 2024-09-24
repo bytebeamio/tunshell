@@ -3,7 +3,7 @@ use super::{InputStream, Interpreter, OutputStream, Token};
 use crate::shell::{proto::WindowSize, server::shell::Shell};
 use anyhow::{Error, Result};
 use async_trait::async_trait;
-use futures::{Future, Stream};
+use futures::{AsyncRead, Future, Stream};
 use std::{
     collections::HashMap,
     io::Write,
@@ -11,7 +11,6 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
 };
-use tokio::io::AsyncRead;
 use tokio::task::JoinHandle;
 
 /// In unix environments which do not support pty's we use this

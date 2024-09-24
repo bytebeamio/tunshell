@@ -1,4 +1,4 @@
-use super::{UdpConnectionVars, UdpPacket, MAX_PACKET_SIZE, SequenceNumber, UdpPacketType};
+use super::{SequenceNumber, UdpConnectionVars, UdpPacket, UdpPacketType, MAX_PACKET_SIZE};
 use log::*;
 use std::cmp;
 use std::sync::{Arc, Mutex};
@@ -18,7 +18,7 @@ impl UdpConnectionVars {
                 self.peer_ack_number,
                 self.peer_window
             );
-            
+
             self.window_wakers
                 .push((cx.waker().clone(), packet.end_sequence_number()));
             return Poll::Pending;
@@ -31,7 +31,7 @@ impl UdpConnectionVars {
         sequence_number < self.max_send_sequence_number()
     }
 
-    pub(super) fn max_send_sequence_number(&self ) -> SequenceNumber {
+    pub(super) fn max_send_sequence_number(&self) -> SequenceNumber {
         self.peer_ack_number + SequenceNumber(cmp::min(self.peer_window, self.transit_window))
     }
 
@@ -40,7 +40,8 @@ impl UdpConnectionVars {
     }
 
     pub(super) fn wait_until_decongested(&mut self, waker: Waker) {
-        self.window_wakers.push((waker, self.sequence_number + SequenceNumber(1)));
+        self.window_wakers
+            .push((waker, self.sequence_number + SequenceNumber(1)));
     }
 
     pub(super) fn increase_transit_window_after_send(&mut self) {
@@ -71,7 +72,8 @@ impl UdpConnectionVars {
         let max_sequence_number = self.max_send_sequence_number();
 
         // Determine the number of packets we can now send form those are waiting.
-        let (ready_wakers, pending_wakers) = self.window_wakers
+        let (ready_wakers, pending_wakers) = self
+            .window_wakers
             .drain(..)
             .partition(|(_, end_sequence_number)| end_sequence_number < &max_sequence_number);
 
@@ -218,10 +220,10 @@ mod tests {
             let con = Arc::from(Mutex::from(con));
 
             let packet = UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[]);
-            
+
             let packet = tokio::select! {
                 packet = wait_until_can_send(Arc::clone(&con), packet) => packet,
-                _ = tokio::time::delay_for(Duration::from_millis(1)) => panic!("should return from future immediately if there is sufficient window")
+                _ = tokio::time::sleep(Duration::from_millis(1)) => panic!("should return from future immediately if there is sufficient window")
             };
 
             let con = con.lock().unwrap();
@@ -237,7 +239,7 @@ mod tests {
         if std::env::var("CI").is_ok() {
             return;
         }
-        
+
         Runtime::new().unwrap().block_on(async {
             let mut con = UdpConnectionVars::new(UdpConnectionConfig::default());
 
@@ -247,14 +249,14 @@ mod tests {
             let con = Arc::from(Mutex::from(con));
 
             let packet = UdpPacket::data(SequenceNumber(0), SequenceNumber(0), 0, &[]);
-            
+
             let wait_for_send = tokio::spawn(wait_until_can_send(Arc::clone(&con), packet.clone()));
 
-            tokio::time::delay_for(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             {
                 let con = con.lock().unwrap();
-                
+
                 assert_eq!(con.window_wakers.len(), 1);
                 assert_eq!(con.window_wakers[0].1, packet.end_sequence_number());
             }
@@ -263,18 +265,18 @@ mod tests {
             {
                 let mut con = con.lock().unwrap();
                 con.update_peer_window(MAX_PACKET_SIZE as u32);
-                
+
                 assert_eq!(con.window_wakers.len(), 0);
             }
 
-            // Task should now complete      
+            // Task should now complete
             let packet = tokio::select! {
                 packet = wait_for_send => packet.unwrap(),
-                _ = tokio::time::delay_for(Duration::from_millis(1)) => panic!("should return from future immediately if there is sufficient window")
+                _ = tokio::time::sleep(Duration::from_millis(1)) => panic!("should return from future immediately if there is sufficient window")
             };
 
             let con = con.lock().unwrap();
-            
+
             assert_eq!(packet.sequence_number, SequenceNumber(0));
             assert_eq!(con.window_wakers.len(), 0);
         });

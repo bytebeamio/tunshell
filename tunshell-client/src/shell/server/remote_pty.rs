@@ -9,20 +9,21 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use log::*;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::env;
 use std::net::ToSocketAddrs;
 use std::os::unix::prelude::PermissionsExt;
 use std::pin::Pin;
 use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, WriteHalf};
+use tokio::fs;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, WriteHalf};
 use tokio::net::{TcpStream, UnixListener, UnixStream};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::{fs, prelude::*};
 use tokio_rustls::client::TlsStream;
+use tokio_rustls::rustls::{OwnedTrustAnchor, RootCertStore};
 use tokio_rustls::TlsConnector;
-use webpki::DNSNameRef;
 
 pub struct RemotePtyShell {
     connections: HashMap<u32, WriteHalf<UnixStream>>,
@@ -102,7 +103,7 @@ impl RemotePtyShell {
                         return Ok(());
                     }
                 },
-                res = &mut state.proc => match res {
+                res = state.proc.wait() => match res {
                     Ok(exit_code) => {
                         self.handle_exit(stream, exit_code).await?;
                         return Ok(());
@@ -278,21 +279,28 @@ async fn download_rpty_bash() -> Result<String> {
         .next()
         .ok_or_else(|| Error::msg(format!("could not resolve {hostname}")))?;
 
-    let mut tls_config = tokio_rustls::rustls::ClientConfig::default();
-    tls_config
-        .root_store
-        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let root_store = RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS
+            .iter()
+            .map(|ta| {
+                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject.as_ref(),
+                    ta.subject_public_key_info.as_ref(),
+                    ta.name_constraints.as_deref(),
+                )
+            })
+            .collect(),
+    };
+    let tls_config = tokio_rustls::rustls::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
 
     let connector = TlsConnector::from(Arc::new(tls_config));
 
     debug!("connecting to rpty-artifacts.tunshel.com:443");
     let tcp = TcpStream::connect(sock_addr).await?;
-    let mut tls = connector
-        .connect(
-            DNSNameRef::try_from_ascii(hostname.as_bytes()).unwrap(),
-            tcp,
-        )
-        .await?;
+    let mut tls = connector.connect(hostname.try_into().unwrap(), tcp).await?;
 
     debug!("downloading rpty bash");
     tls.write_all(format!("GET {url_path} HTTP/1.1\nHost: {hostname}\n\n").as_bytes())

@@ -1,6 +1,6 @@
 use super::{super::config::Config, IoStream};
 use anyhow::{Error, Result};
-use futures::{Sink, SinkExt, Stream};
+use futures::{AsyncRead, AsyncWrite, Sink, SinkExt, Stream};
 use log::*;
 use mpsc::{Receiver, Sender};
 use std::{
@@ -14,11 +14,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    sync::mpsc,
-    task::JoinHandle,
-};
+use tokio::{sync::mpsc, task::JoinHandle};
 use warp::{
     filters::BoxedFilter,
     ws::{Message, WebSocket},
@@ -53,7 +49,7 @@ impl WebSocketStream {
     // are closed after 350s. Sending a ping prevents that from occurring.
     async fn send_pings(ws: Arc<Mutex<WebSocket>>, closed: Arc<AtomicBool>) {
         loop {
-            tokio::time::delay_for(Duration::from_secs(30)).await;
+            tokio::time::sleep(Duration::from_secs(30)).await;
 
             if closed.load(Ordering::Relaxed) {
                 debug!("websocket closed, finished sending pings");
@@ -149,7 +145,7 @@ impl AsyncWrite for WebSocketStream {
             .map_err(warp_err_to_io_err)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         let mut ws = self.ws.lock().unwrap();
         Pin::new(&mut *ws)
             .poll_close(cx)
@@ -206,7 +202,7 @@ impl WebSocketListener {
             .and(warp::ws()) //
             .and(warp::addr::remote())
             .map(move |ws: warp::ws::Ws, addr: Option<SocketAddr>| {
-                let mut con_tx = con_tx.clone();
+                let con_tx = con_tx.clone();
 
                 ws.on_upgrade(move |websocket| async move {
                     if addr.is_none() {
@@ -261,19 +257,14 @@ mod tests {
     use async_tungstenite::{
         async_tls::client_async_tls_with_connector, WebSocketStream as ClientWebSocketStream,
     };
-    use futures::{FutureExt, SinkExt, StreamExt};
+    use futures::{AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt, StreamExt};
     use lazy_static::lazy_static;
     use std::{
         net::{Ipv4Addr, SocketAddr},
         sync::Mutex,
         time::Duration,
     };
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpStream,
-        runtime::Runtime,
-        time::delay_for,
-    };
+    use tokio::{net::TcpStream, runtime::Runtime, time::sleep};
     use tokio_util::compat::*;
     use tungstenite::protocol::Message as ClientMessage;
 
@@ -299,7 +290,7 @@ mod tests {
         )
         .await;
 
-        delay_for(Duration::from_millis(100)).await;
+        sleep(Duration::from_millis(100)).await;
 
         server.unwrap()
     }
@@ -367,7 +358,7 @@ mod tests {
             let mut listener = init_server(&mut config).await;
             let ((addr1, _client_con1), (addr2, _client_con2)) = futures::join!(
                 init_connection(config.api_port),
-                delay_for(Duration::from_millis(100)).then(|_| init_connection(config.api_port))
+                sleep(Duration::from_millis(100)).then(|_| init_connection(config.api_port))
             );
 
             let server_con1 = listener.accept().await.unwrap();

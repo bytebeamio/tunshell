@@ -1,12 +1,12 @@
 use crate::stream::TunnelStream;
 use futures::stream::Stream;
+use futures::{AsyncRead, AsyncWrite};
 use log::debug;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::pin::Pin;
 use std::result::Result as StdResult;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, AsyncWrite};
 use tunshell_shared::{ClientMessage, MessageStream, RelayPayload, ServerMessage};
 
 pub struct RelayStream<S: futures::AsyncRead + futures::AsyncWrite + Unpin> {
@@ -125,10 +125,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> AsyncWrite for 
         Pin::new(self.message_stream.lock().unwrap().inner_mut()).poll_flush(cx)
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<StdResult<(), IoError>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<StdResult<(), IoError>> {
         if !self.sent_close {
             self.sent_close = true;
 
@@ -158,7 +155,7 @@ impl<S: futures::AsyncRead + futures::AsyncWrite + Send + Unpin> TunnelStream fo
 mod tests {
     use super::*;
     use futures::io::Cursor;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use futures::{AsyncReadExt, AsyncWriteExt};
     use tokio::runtime::Runtime;
     use tunshell_shared::Message;
 
@@ -297,7 +294,7 @@ mod tests {
         let message_stream = Arc::new(Mutex::new(message_stream));
         let mut relay_stream = RelayStream::new(message_stream.clone());
 
-        let result = Runtime::new().unwrap().block_on(relay_stream.shutdown());
+        let result = Runtime::new().unwrap().block_on(relay_stream.close());
 
         assert!(result.is_ok());
         assert_eq!(

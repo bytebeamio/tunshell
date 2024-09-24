@@ -1,7 +1,7 @@
 use super::ClientMessageStream;
 use crate::db::Session;
 use anyhow::{Error, Result};
-use futures::{Future, FutureExt, StreamExt};
+use futures::{AsyncRead, AsyncWrite, Future, FutureExt, StreamExt};
 use std::net::SocketAddr;
 use std::{
     collections::HashMap,
@@ -9,10 +9,7 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    task::JoinHandle,
-};
+use tokio::task::JoinHandle;
 use tunshell_shared::ClientMessage;
 
 pub(super) trait IoStream: AsyncRead + AsyncWrite + Unpin + Send + Sync {

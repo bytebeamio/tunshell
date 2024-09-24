@@ -2,7 +2,7 @@ use reqwest;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::runtime::Runtime;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 use tunshell_client as client;
 use tunshell_server as server;
 
@@ -15,7 +15,7 @@ fn test() {
 
         tokio::task::spawn(server::start(config.clone()));
 
-        delay_for(Duration::from_millis(1000)).await;
+        sleep(Duration::from_millis(1000)).await;
 
         let http = reqwest::Client::builder()
             .danger_accept_invalid_certs(true)

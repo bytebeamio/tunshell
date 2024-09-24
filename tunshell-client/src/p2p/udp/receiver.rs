@@ -245,7 +245,7 @@ mod tests {
 
             let event = tokio::select! {
                 event = rx.recv() => event.unwrap(),
-                _ = tokio::time::delay_for(Duration::from_millis(10)) => panic!("should received event from channel")
+                _ = tokio::time::sleep(Duration::from_millis(10)) => panic!("should received event from channel")
             };
 
             assert_eq!(event, SendEvent::AckUpdate);
@@ -271,7 +271,7 @@ mod tests {
 
             tokio::select! {
                 event = rx.recv() =>  panic!("should not receive event for processing empty packet, received: {:?}", event),
-                _ = tokio::time::delay_for(Duration::from_millis(10)) => {}
+                _ = tokio::time::sleep(Duration::from_millis(10)) => {}
             };
         });
     }
@@ -422,7 +422,7 @@ mod tests {
             };
 
             // Yield to executor to allow recv_task to poll
-            tokio::time::delay_for(Duration::from_millis(10)).await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
 
             // Polling the future should add the waker to recv_wakers
             {
@@ -449,7 +449,7 @@ mod tests {
 
             let result = tokio::select! {
                 result = recv_task => result,
-                _ = tokio::time::delay_for(Duration::from_millis(10)) => panic!("recv_task should resolve")
+                _ = tokio::time::sleep(Duration::from_millis(10)) => panic!("recv_task should resolve")
             };
 
             assert_eq!(result.unwrap(), vec![1, 2, 3, 4, 5]);
@@ -495,7 +495,7 @@ mod tests {
 
             let event = tokio::select! {
                 event = rx.recv() => event.unwrap(),
-                _ = tokio::time::delay_for(Duration::from_millis(10)) => panic!("should received event from channel")
+                _ = tokio::time::sleep(Duration::from_millis(10)) => panic!("should received event from channel")
             };
 
             assert_eq!(event, SendEvent::WindowUpdate);

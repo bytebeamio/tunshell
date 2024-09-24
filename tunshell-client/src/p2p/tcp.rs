@@ -4,18 +4,19 @@ use anyhow::{Error, Result};
 use async_trait::async_trait;
 use futures::future::pending;
 use futures::TryFutureExt;
+use futures::{AsyncRead, AsyncWrite};
 use log::*;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::pin::Pin;
-use std::{time::Duration, task::{Context, Poll}};
-use tokio::io::{AsyncRead, AsyncWrite};
+use std::task::{Context, Poll};
 use tokio::net::{TcpListener, TcpStream};
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 use tunshell_shared::PeerJoinedPayload;
 
 pub struct TcpConnection {
     peer_info: PeerJoinedPayload,
     listener: Option<TcpListener>,
-    socket: Option<TcpStream>,
+    socket: Option<Compat<TcpStream>>,
 }
 
 impl AsyncRead for TcpConnection {
@@ -24,7 +25,9 @@ impl AsyncRead for TcpConnection {
         cx: &mut Context<'_>,
         buff: &mut [u8],
     ) -> Poll<std::result::Result<usize, std::io::Error>> {
-        Pin::new(&mut self.socket.as_mut().unwrap()).poll_read(cx, buff)
+        Pin::new(&mut self.socket.as_mut().unwrap())
+            .poll_read(cx, buff)
+            .map(|c| c.map(|_| 0))
     }
 }
 
@@ -44,11 +47,11 @@ impl AsyncWrite for TcpConnection {
         Pin::new(&mut self.socket.as_mut().unwrap()).poll_flush(cx)
     }
 
-    fn poll_shutdown(
+    fn poll_close(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<std::result::Result<(), std::io::Error>> {
-        Pin::new(&mut self.socket.as_mut().unwrap()).poll_shutdown(cx)
+        Pin::new(&mut self.socket.as_mut().unwrap()).poll_close(cx)
     }
 }
 
@@ -106,8 +109,8 @@ impl P2PConnection for TcpConnection {
             let connected_ip = self.peer_info.peer_ip_address.parse::<IpAddr>().unwrap();
 
             if peer_addr.ip() == connected_ip {
-                socket.set_keepalive(Some(Duration::from_secs(30)))?;
-                self.socket.replace(socket);
+                // socket.set_keepalive(Some(Duration::from_secs(30)))?;
+                self.socket.replace(socket.compat());
                 return Ok(());
             } else {
                 error!("received connection from unknown ip address: {}", peer_addr);
@@ -121,15 +124,15 @@ impl P2PConnection for TcpConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::{AsyncReadExt, AsyncWriteExt, FutureExt};
     use std::time::Duration;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::{runtime::Runtime, time::delay_for};
-    use futures::FutureExt;
+    use tokio::{runtime::Runtime, time::sleep};
+    use tokio_util::compat::TokioAsyncReadCompatExt;
 
     #[test]
     fn test_connect_via_connect() {
         Runtime::new().unwrap().block_on(async {
-            let mut listener = TcpListener::bind("0.0.0.0:22335".to_owned())
+            let listener = TcpListener::bind("0.0.0.0:22335".to_owned())
                 .await
                 .expect("failed listen for connection");
 
@@ -145,10 +148,11 @@ mod tests {
                 .await
                 .expect("failed to connect");
 
-            let (mut socket, _) = listener
+            let (socket, _) = listener
                 .accept()
                 .await
                 .expect("failed to accept connection");
+            let mut socket = socket.compat();
 
             connection1
                 .write("hello".as_bytes())
@@ -189,12 +193,13 @@ mod tests {
 
             let port = connection1.bind().await.expect("failed to bind");
 
-            let socket = delay_for(Duration::from_millis(100))
+            let socket = sleep(Duration::from_millis(100))
                 .then(|_| TcpStream::connect(format!("127.0.0.1:{}", port)))
                 .or_else(|err| futures::future::err(Error::new(err)));
 
-            let (_, mut socket) = futures::try_join!(connection1.connect(22444, false), socket)
+            let (_, socket) = futures::try_join!(connection1.connect(22444, false), socket)
                 .expect("failed to connect");
+            let mut socket = socket.compat();
 
             socket.write("hello".as_bytes()).await.unwrap();
 

@@ -13,7 +13,7 @@ cfg_if! {
         }
 
 
-        pub async fn delay_for(duration: Duration) {
+        pub async fn sleep(duration: Duration) {
             let woken = Arc::new(Mutex::new(false));
 
             futures::future::poll_fn(move |cx| {
@@ -40,8 +40,8 @@ cfg_if! {
     } else {
         use tokio::time;
 
-        pub async fn delay_for(duration: Duration) {
-            time::delay_for(duration).await
+        pub async fn sleep(duration: Duration) {
+            time::sleep(duration).await
         }
     }
 }

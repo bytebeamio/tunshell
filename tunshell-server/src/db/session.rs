@@ -163,7 +163,11 @@ impl SessionStore {
 
 // Generates ~131 bits of entropy (22 chars) using alphanumeric charset
 pub(crate) fn generate_secure_key() -> String {
-    thread_rng().sample_iter(&Alphanumeric).take(22).collect()
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(22)
+        .map(char::from)
+        .collect()
 }
 
 #[cfg(test)]
@@ -197,8 +201,8 @@ mod tests {
             };
 
             assert_eq!(store.find_by_key("valid_peer1_key").await.unwrap(), Some(session.clone()));
-            assert_eq!(store.find_by_key("valid_peer2_key").await.unwrap(), Some(session.clone())); 
-            assert_eq!(store.find_by_key("invalid_key").await.unwrap(), None); 
+            assert_eq!(store.find_by_key("valid_peer2_key").await.unwrap(), Some(session.clone()));
+            assert_eq!(store.find_by_key("invalid_key").await.unwrap(), None);
         });
     }
 

@@ -3,6 +3,7 @@ use super::{
     UdpConnectionState, UdpConnectionVars,
 };
 use anyhow::{Error, Result};
+use futures::{AsyncRead, AsyncWrite};
 use log::*;
 use std::io;
 use std::mem;
@@ -10,7 +11,6 @@ use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
@@ -189,15 +189,15 @@ impl UdpConnection {
         Ok(())
     }
 
-    /// Closes the connection
-    #[allow(dead_code)]
-    pub async fn close(&mut self) -> Result<()> {
-        if !self.is_connected() {
-            return Err(Error::msg("Connection must be in CONNECTED state"));
-        }
+    // /// Closes the connection
+    // #[allow(dead_code)]
+    // pub async fn close(&mut self) -> Result<()> {
+    //     if !self.is_connected() {
+    //         return Err(Error::msg("Connection must be in CONNECTED state"));
+    //     }
 
-        self.shutdown().await.map_err(Error::from)
-    }
+    //     self.close().await.map_err(Error::from)
+    // }
 }
 
 impl AsyncRead for UdpConnection {
@@ -281,7 +281,7 @@ impl AsyncWrite for UdpConnection {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if let State::Disconnecting(running) = &self.state {
             if !self.is_connected() {
                 self.state = State::Disconnected;
@@ -321,12 +321,12 @@ impl AsyncWrite for UdpConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::{AsyncReadExt, AsyncWriteExt};
     use lazy_static::lazy_static;
     use std::net::SocketAddr;
     use std::time::Duration;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::runtime::Runtime;
-    use tokio::time::delay_for;
+    use tokio::time::sleep;
 
     lazy_static! {
         static ref UDP_PORT_NUMBER: Mutex<u16> = Mutex::from(27660);
@@ -467,7 +467,7 @@ mod tests {
             assert_eq!(con2.is_disconnected(), true);
 
             // Wait for close packet to be sent and process
-            delay_for(Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(500)).await;
 
             assert_eq!(con1.is_new(), false);
             assert_eq!(con1.is_connected(), false);

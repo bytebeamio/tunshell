@@ -2,13 +2,12 @@ use anyhow::{Error, Result};
 use futures::channel::mpsc;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::stream::StreamExt;
-use io::{AsyncReadExt, AsyncWriteExt};
 use log::*;
 use std::{
     env,
     thread::{self, JoinHandle},
 };
-use tokio::io;
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 
 pub struct HostShellStdin {
     stdin: io::Stdin,
@@ -37,7 +36,7 @@ impl HostShellStdin {
 impl HostShellStdout {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            stdout: io::stdout(),
+            stdout: tokio::io::stdout(),
         })
     }
 

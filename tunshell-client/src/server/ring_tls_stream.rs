@@ -1,54 +1,73 @@
 #![allow(unexpected_cfgs)]
 use crate::Config;
 use anyhow::{bail, Context as AnyhowContext, Result};
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use std::{
+    convert::TryInto,
     io,
     net::ToSocketAddrs,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::Duration,
 };
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::TcpStream,
+use tokio::net::TcpStream;
+use tokio_rustls::{
+    client::TlsStream,
+    rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore},
+    TlsConnector,
 };
-use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
-use webpki::DNSNameRef;
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 pub struct TlsServerStream {
-    inner: TlsStream<TcpStream>,
+    pub(crate) inner: Compat<TlsStream<TcpStream>>,
 }
 
 impl TlsServerStream {
     pub async fn connect(config: &Config, port: u16) -> Result<Self> {
-        let mut tls_config = ClientConfig::default();
-        tls_config
-            .root_store
-            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+        let root_store = RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS
+                .iter()
+                .map(|ta| {
+                    OwnedTrustAnchor::from_subject_spki_name_constraints(
+                        ta.subject.as_ref(),
+                        ta.subject_public_key_info.as_ref(),
+                        ta.name_constraints.as_deref(),
+                    )
+                })
+                .collect(),
+        };
+        let tls_config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+        // tls_config
+        //     .root_store
+        //     .add_server_trust_anchors();
 
-        if config.dangerous_disable_relay_server_verification() {
-            use tokio_rustls::rustls;
+        // if config.dangerous_disable_relay_server_verification() {
+        //     use tokio_rustls::rustls;
 
-            struct NullCertVerifier {}
+        //     struct NullCertVerifier {}
 
-            impl rustls::ServerCertVerifier for NullCertVerifier {
-                fn verify_server_cert(
-                    &self,
-                    _roots: &rustls::RootCertStore,
-                    _presented_certs: &[rustls::Certificate],
-                    _dns_name: webpki::DNSNameRef,
-                    _ocsp_response: &[u8],
-                ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-                    Ok(rustls::ServerCertVerified::assertion())
-                }
-            }
+        //     impl rustls::client::ServerCertVerifier for NullCertVerifier {
+        //         fn verify_server_cert(
+        //             &self,
+        //             _end_entity: &Certificate,
+        //             _intermediates: &[Certificate],
+        //             _server_name: &ServerName,
+        //             _scts: &mut dyn Iterator<Item = &[u8]>,
+        //             _ocsp_response: &[u8],
+        //             _now: SystemTime,
+        //         ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        //             Ok(rustls::client::ServerCertVerified::assertion())
+        //         }
+        //     }
 
-            log::warn!("disabling TLS verification");
-            tls_config
-                .dangerous()
-                .set_certificate_verifier(Arc::new(NullCertVerifier {}));
-        }
+        //     log::warn!("disabling TLS verification");
+        //     tls_config
+        //         .dangerous()
+        //         .set_certificate_verifier(Arc::new(NullCertVerifier {}));
+        // }
 
         // For targeting CPUs without native SSE2 support (iSH emulated CPU)
         // =================================================================
@@ -73,7 +92,7 @@ impl TlsServerStream {
 
         let connector = TlsConnector::from(Arc::new(tls_config));
 
-        let relay_dns_name = DNSNameRef::try_from_ascii_str(config.relay_host())?;
+        let relay_dns_name = config.relay_host().try_into()?;
 
         let network_stream = if let Ok(http_proxy) = std::env::var("HTTP_PROXY") {
             log::info!("Connecting to relay server via http proxy {}", http_proxy);
@@ -89,14 +108,14 @@ impl TlsServerStream {
             TcpStream::connect(relay_addr).await?
         };
 
-        if let Err(err) = network_stream.set_keepalive(Some(Duration::from_secs(30))) {
-            log::warn!("failed to set tcp keepalive: {}", err);
-        }
+        // if let Err(err) = network_stream.set_keepalive(true) {
+        //     log::warn!("failed to set tcp keepalive: {}", err);
+        // }
 
         let transport_stream = connector.connect(relay_dns_name, network_stream).await?;
 
         Ok(Self {
-            inner: transport_stream,
+            inner: transport_stream.compat(),
         })
     }
 }
@@ -107,7 +126,7 @@ async fn connect_via_http_proxy(
     http_proxy: String,
 ) -> Result<TcpStream> {
     let proxy_addr = http_proxy.to_socket_addrs()?.next().unwrap();
-    let mut proxy_stream = TcpStream::connect(proxy_addr).await?;
+    let mut proxy_stream = TcpStream::connect(proxy_addr).await?.compat();
 
     proxy_stream
         .write_all(format!("CONNECT {}:{} HTTP/1.1\n\n", config.relay_host(), port).as_bytes())
@@ -128,7 +147,7 @@ async fn connect_via_http_proxy(
         ));
     }
 
-    Ok(proxy_stream)
+    Ok(proxy_stream.into_inner())
 }
 
 impl AsyncRead for TlsServerStream {
@@ -154,11 +173,8 @@ impl AsyncWrite for TlsServerStream {
         Pin::new(&mut self.inner).poll_flush(cx)
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.inner).poll_close(cx)
     }
 }
 

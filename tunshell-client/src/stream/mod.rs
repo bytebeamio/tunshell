@@ -1,4 +1,4 @@
-use tokio::io::{AsyncRead, AsyncWrite};
+use futures::{AsyncRead, AsyncWrite};
 
 mod aes_stream;
 mod crypto;
@@ -9,12 +9,10 @@ pub use relay_stream::*;
 
 pub trait TunnelStream: AsyncRead + AsyncWrite + Send + Unpin {}
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use futures::io::Cursor;
-    use tokio_util::compat::Compat;
 
-    impl TunnelStream for Compat<Cursor<Vec<u8>>> {}
+    impl TunnelStream for Cursor<Vec<u8>> {}
 }
