@@ -1,8 +1,10 @@
 FROM rust:alpine AS build
 
 ENV RUSTFLAGS="--cfg alpine"
+ENV OPENSSL_LIB_DIR=/usr/lib
+ENV OPENSSL_INCLUDE_DIR=/usr/include
 
-RUN apk add --no-cache musl-dev sqlite-dev openssl-dev
+RUN apk add --no-cache musl-dev sqlite-dev openssl-dev pkgconfig
 RUN mkdir /app/
 
 COPY . /app/

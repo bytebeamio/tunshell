@@ -63,3 +63,5 @@ scripts/java/bin/
 
 # sqlite
 *.sqlite
+
+website/services/wasm

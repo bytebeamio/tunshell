@@ -51,7 +51,7 @@ export const DirectWebSession = () => {
 
   return (
     <TunshellClient session={sessionKeys} onClose={() => setState(State.Complete)}>
-      <Donate style={{ zIndex: 11 }} />
+      {/*<Donate style={{ zIndex: 11 }} />*/}
     </TunshellClient>
   );
 };

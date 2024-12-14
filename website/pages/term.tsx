@@ -6,11 +6,11 @@ import { DirectWebSession } from "../components/direct-web-term";
 export default function Web() {
   return (
     <div className="container">
-      <Head>
-        <title>Direct Web Session - Tunshell</title>
-      </Head>
-
-      <Header />
+      {/*<Head>*/}
+      {/*  <title>Direct Web Session - Tunshell</title>*/}
+      {/*</Head>*/}
+      {/**/}
+      {/*<Header />*/}
       <DirectWebSession />
     </div>
   );

@@ -5,7 +5,8 @@ export interface RelayServer {
 }
 
 export const RELAY_SERVERS: RelayServer[] = [
-  { label: "US", domain: "relay.tunshell.com", default: true },
+  { label: "BB", domain: "tunnelshell.bytebeam.io", default: true },
+  { label: "US", domain: "relay.tunshell.com", default: false },
   { label: "AU", domain: "au.relay.tunshell.com", default: false },
   { label: "UK", domain: "eu.relay.tunshell.com", default: false },
 ];
