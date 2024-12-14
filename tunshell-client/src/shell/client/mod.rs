@@ -133,16 +133,16 @@ impl ShellClient {
         let mut resize_watcher = self.host_shell.resize_watcher()?;
 
         loop {
-            info!("waiting for shell message");
+            debug!("waiting for shell message");
             tokio::select! {
                 result = stdin.read(&mut buff) => match result {
                     Ok(read) => {
-                        info!("read {} bytes from stdin", read);
+                        debug!("read {} bytes from stdin", read);
                         if read == 0 {
                             return Err(Error::msg("stdin closed"));
                         }
                         stream.write(&ShellClientMessage::Stdin(buff[..read].to_vec())).await?;
-                        info!("sent {} bytes to remote shell", read);
+                        debug!("sent {} bytes to remote shell", read);
                     },
                     Err(err) => {
                         error!("error while reading from stdin: {}", err);

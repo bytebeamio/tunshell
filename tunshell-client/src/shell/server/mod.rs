@@ -150,7 +150,7 @@ impl ShellServer {
         };
 
         loop {
-            info!("waiting for shell message");
+            debug!("waiting for shell message");
             tokio::select! {
                 result = shell.read(&mut buff) => match result {
                     Ok(0) => {
@@ -161,7 +161,7 @@ impl ShellServer {
                         break;
                     },
                     Ok(read) => {
-                        info!("read {} bytes from stdout", read);
+                        debug!("read {} bytes from stdout", read);
 
                         if let Some(host_stdout) = host_stdout.as_mut() {
                             host_stdout.write_all(&buff[..read]).await?;
@@ -169,7 +169,7 @@ impl ShellServer {
                         }
 
                         stream.write(&ShellServerMessage::Stdout(buff[..read].to_vec())).await?;
-                        info!("sent {} bytes to client shell", read);
+                        debug!("sent {} bytes to client shell", read);
                     },
                     Err(err) => {
                         error!("error while reading from stdout: {}", err);
@@ -178,9 +178,9 @@ impl ShellServer {
                 },
                 message = stream.next() => match message {
                     Some(Ok(ShellClientMessage::Stdin(payload))) => {
-                        info!("received {} bytes from client shell", payload.len());
+                        debug!("received {} bytes from client shell", payload.len());
                         shell.write(payload.as_slice()).await?;
-                        info!("wrote {} bytes to shell", payload.len());
+                        debug!("wrote {} bytes to shell", payload.len());
                     }
                     Some(Ok(ShellClientMessage::Resize(size))) => {
                         info!("received window resize: {:?}", size);

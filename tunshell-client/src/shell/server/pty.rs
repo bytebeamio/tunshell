@@ -97,8 +97,9 @@ impl PtyShell {
         let task = tokio::task::spawn_blocking(move || {
             let mut buff = [0u8; 1024];
 
+            info!("begin reading from pty");
             loop {
-                info!("reading from pty");
+                debug!("reading from pty");
                 let read = match pty_reader.read(&mut buff) {
                     Ok(0) => {
                         info!("finished reading from pty");
@@ -114,7 +115,7 @@ impl PtyShell {
                     }
                 };
 
-                info!("read {} bytes from pty", read);
+                debug!("read {} bytes from pty", read);
 
                 if let Err(err) = send_sync(&mut tx, buff[..read].to_vec()) {
                     warn!("error while sending to channel: {}", err);
@@ -134,7 +135,7 @@ impl PtyShell {
 
         let task = tokio::task::spawn_blocking(move || {
             while let Ok(Some(data)) = recv_sync(&mut rx) {
-                info!("writing to pty");
+                debug!("writing to pty");
                 match pty_writer.write_all(data.as_slice()) {
                     Ok(_) => {}
                     Err(err) => {
@@ -145,7 +146,7 @@ impl PtyShell {
                         break;
                     }
                 };
-                info!("wrote {} bytes to pty", data.len());
+                debug!("wrote {} bytes to pty", data.len());
             }
         });
 
